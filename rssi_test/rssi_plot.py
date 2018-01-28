@@ -8,8 +8,10 @@ import time
 import sys
 import gc
 import random
-from multiprocessing import Process
+import Queue
+import threading
 from matplotlib import style
+from subprocess import Popen, PIPE
 
 class wlan_device(object):
 	def __init__(self, device_port):
@@ -98,46 +100,54 @@ class turn_table_device(object):
 class wlan_rssi_plot(object):
 	def __init__(self, **kargs):
 		device_port = kargs['device_port']
+		test_type = kargs['test_type']
 		plot_type = kargs['plot_type']
 		self.__wlan_device = wlan_device(device_port)
 		self.__wlan_device_port = self.__wlan_device.device_port
 		if self.__wlan_device_port != None:
 			style.use('fivethirtyeight')
-			if plot_type == 'rssi_monitor':
+			if test_type == 'rssi_monitor':
 				self.__fig = plt.figure()
-				self.__fig.canvas.set_window_title(plot_type+'_'+self.__wlan_device_port)
+				self.__fig.canvas.set_window_title(test_type+'_'+self.__wlan_device_port)
 				self.__ch_rssi_ax = self.__fig.add_subplot(212)
 				self.__ch_imbalance_ax = self.__fig.add_subplot(211)
-			elif plot_type == 'rssi_turn_table':
+			elif test_type == 'rssi_turn_table':
 				self.__fig = plt.figure(figsize=(10,5))
-				self.__fig.canvas.set_window_title(plot_type+'_'+self.__wlan_device_port)
+				self.__fig.canvas.set_window_title(test_type+'_'+self.__wlan_device_port)
 				self.__ch_rssi_ax = self.__fig.add_subplot(122)
 				self.__ch_imbalance_ax = self.__fig.add_subplot(121, projection='polar')
 				self.__turn_table_test_cnt = kargs['turn_table_cnt']
 				self.__turn_table_device = turn_table_device(kargs['com_port'])
 				self.__rssi_avg_list = list()
 			else:
-				print "invalid plot type:" + plot_type
+				print "invalid test type:" + test_type
 				return
-			self.__plot_type = plot_type
+			self.__test_type = test_type
 			self.__ch_imbalance_ys = list()
 			self.__ch0_rssi_ys = list()
 			self.__ch1_rssi_ys = list()
 			self.__cmb_rssi_ys = list()
 			self.__rssi_dump_list = list()
+			self.__plot_type = plot_type
+			self.__q = Queue.Queue()
+			self.__thread_term = False
+			self.__rssi_thread = threading.Thread(target=self.__rssi_thread_func, name = 'rssi_thread')
+			self.__rssi_thread.setDaemon(True)
+			self.__rssi_thread.start()
+
 			#output folder clean up
-			if not os.path.exists(self.__plot_type):
-				os.mkdir(self.__plot_type)
-			fileList = os.listdir(self.__plot_type)
+			if not os.path.exists(self.__test_type):
+				os.mkdir(self.__test_type)
+			fileList = os.listdir(self.__test_type)
 			for filename in fileList:
 				if self.__wlan_device_port in filename:
-					os.remove(self.__plot_type+'/'+filename)
+					os.remove(self.__test_type+'/'+filename)
 
 	def __dump_rssi_to_csv(self, postfix):
 		print "dump %d rssi entries to csv file" % len(self.__rssi_dump_list)
 		if postfix != '':
 			postfix = '_'+postfix
-		file_name = self.__plot_type+'/'+'rssi_dump_'+self.__wlan_device_port+ postfix +'.csv'
+		file_name = self.__test_type+'/'+'rssi_dump_'+self.__wlan_device_port+ postfix +'.csv'
 		first_write = False
 		if not os.path.exists(file_name):
 			first_write = True
@@ -155,7 +165,10 @@ class wlan_rssi_plot(object):
 			min_y, max_y= min(self.__cmb_rssi_ys), max(self.__cmb_rssi_ys)
 			min_x, max_x = self.__cmb_rssi_ys.index(min_y), self.__cmb_rssi_ys.index(max_y)
 			self.__ch_rssi_ax.clear()
-			self.__ch_rssi_ax.set_ylim([min_y-10, max_y+10])
+			if min(self.__ch0_rssi_ys) != 0:
+				self.__ch_rssi_ax.set_ylim([min(min(min_y, min(self.__ch0_rssi_ys)),min(self.__ch1_rssi_ys)) -10, max(max(max_y, max(self.__ch0_rssi_ys)),max(self.__ch1_rssi_ys))+10])
+			else:
+				self.__ch_rssi_ax.set_ylim([min_y-10, max_y+10])
 			self.__ch_rssi_ax.set_title('ch_rssi', fontsize = 10)
 			self.__ch_rssi_ax.annotate('min:'+str(min_y), xy=(min_x, min_y-3), fontsize=5, alpha=0.6)
 			self.__ch_rssi_ax.annotate('max:'+str(max_y), xy=(max_x, max_y+2), fontsize=5, alpha=0.6)
@@ -170,7 +183,7 @@ class wlan_rssi_plot(object):
 			min_y, max_y= min(self.__ch_imbalance_ys), max(self.__ch_imbalance_ys)
 			min_x, max_x = self.__ch_imbalance_ys.index(min_y), self.__ch_imbalance_ys.index(max_y)
 			self.__ch_imbalance_ax.set_ylim([min_y-10, max_y+10])
-			if self.__plot_type == "rssi_turn_table":
+			if self.__test_type == "rssi_turn_table":
 				self.__ch_imbalance_ax.plot([float(item)/(57) for item in xs_list ], self.__ch_imbalance_ys, lw=2)
 			else:
 				self.__ch_imbalance_ax.annotate('min:'+str(min_y), xy=(min_x, min_y-3), fontsize=5, alpha=0.6)
@@ -182,10 +195,42 @@ class wlan_rssi_plot(object):
 		plt.tight_layout()
 		print gc.collect()
 
+	def __rssi_thread_func(self):
+		q = self.__q
+		if self.__plot_type == 'poll':
+			wlan_port = self.__wlan_device_port
+			os.popen('adb -s ' + wlan_port + ' shell logcat -c')
+			cmd = 'adb -s ' + wlan_port +  ' shell logcat -v time *:V | grep -i "L2ConnectedState !CMD_RSSI_POLL"'
+			p = Popen(cmd, stdout=PIPE)
+			while True:
+				if self.__thread_term:
+					return
+				rssi_meta_list = list()
+				cmd_out = p.stdout.readline()
+				print "%s cmd:%s" %(threading.current_thread().name, cmd_out)
+				if 'CMD_RSSI_POLL' in cmd_out:
+					os.popen('adb -s ' + wlan_port + ' shell logcat -c')
+					#break
+				#time.sleep(1)
+				#print cmd_out
+				ch0_rssi = 0
+				ch1_rssi = 0
+				cmb_rssi = int(cmd_out[cmd_out.find('rssi=')+5:cmd_out.find('f=')-1], 10)
+				print cmb_rssi
+				rssi_meta_list = [float(ch0_rssi - ch1_rssi), float(ch0_rssi), float(ch1_rssi), float(cmb_rssi)]
+				q.put(rssi_meta_list)
+		else:
+			while True:
+				if self.__thread_term:
+					return
+				q.put(self.__wlan_device.get_rssi())
+				time.sleep(3)
+
 	def __animate_rssi_monitor_func(self, i):
 		rssi_list = list()
 		xs = list()
-		rssi_list =	self.__wlan_device.get_rssi()
+		rssi_list =	self.__q.get(True)
+
 		if len(rssi_list) == 0:
 			return
 		self.__rssi_dump_list.append(rssi_list)
@@ -213,7 +258,7 @@ class wlan_rssi_plot(object):
 		tmp_rssi_list = list()
 		if len(self.__rssi_dump_list) == 35:
 			print "done turn table test_cnt:%d" % self.__turn_table_test_cnt
-			plt.savefig(self.__plot_type+'/'+'chain_imbalance_turntable_'+self.__wlan_device_port+'_'+str(self.__turn_table_test_cnt)+'.png')
+			plt.savefig(self.__test_type+'/'+'chain_imbalance_turntable_'+self.__wlan_device_port+'_'+str(self.__turn_table_test_cnt)+'.png')
 			self.__dump_rssi_to_csv(str(self.__turn_table_test_cnt))
 			self.__turn_table_test_cnt -= 1
 			self.__rssi_dump_list[:] = []
@@ -227,7 +272,7 @@ class wlan_rssi_plot(object):
 			if self.__turn_table_test_cnt == 0:
 				self.wlan_device.set_power_state('off')
 				exit()
-		tmp_rssi_list = self.__wlan_device.get_rssi()
+		tmp_rssi_list = self.__q.get(True)
 		if len(tmp_rssi_list) == 0:
 			return
 		self.__rssi_avg_list.append(tmp_rssi_list)
@@ -252,11 +297,11 @@ class wlan_rssi_plot(object):
 	def __animate_run(self, intval):
 		if self.__wlan_device_port == None:
 			return
-		if self.__plot_type == "rssi_monitor":
+		if self.__test_type == "rssi_monitor":
 			ani = animation.FuncAnimation(self.__fig, self.__animate_rssi_monitor_func, interval=intval)
 			plt.show()
 			self.__dump_rssi_to_csv('')
-		elif self.__plot_type == "rssi_turn_table":
+		elif self.__test_type == "rssi_turn_table":
 			self.__wlan_device.set_power_state('on')
 			self.__turn_table_device.angle_set('init', 0)
 			ani = animation.FuncAnimation(self.__fig, self.__animate_chain_imbalance_turntable_func, interval=intval)
@@ -276,6 +321,9 @@ class wlan_rssi_plot(object):
 			#print "thread exit"
 		else:
 			self.__animate_run(intval)
+			print "end ploting"
+			self.__thread_term = True
+			self.__rssi_thread.join()
 			
 if __name__ == "__main__":
 	if len(sys.argv) >= 3:
@@ -287,10 +335,10 @@ if __name__ == "__main__":
 				com_port = sys.argv[3]
 			if len(sys.argv) > 4:
 				turn_table_cnt = int(sys.argv[4],10)
-			rssi_turn_plt = wlan_rssi_plot(device_port = adb_port, plot_type = 'rssi_turn_table', com_port=com_port, turn_table_cnt=turn_table_cnt)
-			rssi_turn_plt.plot_run(1000, False)	
+			rssi_turn_plt = wlan_rssi_plot(device_port = adb_port, test_type = 'rssi_turn_table', com_port=com_port, turn_table_cnt=turn_table_cnt, plot_type = 'sync')
+			rssi_turn_plt.plot_run(500, False)	
 		else:#rssi moinitor
-			rssi_mon_plt = wlan_rssi_plot(device_port = adb_port, plot_type = 'rssi_monitor')
-			rssi_mon_plt.plot_run(1000, False)			
+			rssi_mon_plt = wlan_rssi_plot(device_port = adb_port, test_type = 'rssi_monitor', plot_type = 'poll')
+			rssi_mon_plt.plot_run(500, False)			
 	else:
 		print "invalid test case " + test_case
