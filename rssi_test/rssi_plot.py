@@ -39,7 +39,7 @@ class wlan_device(object):
 			print rssi_meta_list
 			return rssi_meta_list
 		if self.device_port != None:
-			os.popen('adb -s ' + self.device_port + ' wait-for-device root')
+			#os.popen('adb -s ' + self.device_port + ' wait-for-device root')
 			rssi_meta_list = list()
 			out = os.popen('adb -s ' + self.device_port + ' shell iw wlan0 station dump')
 			cmd_out = out.read()
@@ -66,6 +66,15 @@ class wlan_device(object):
 				os.popen('adb -s ' + self.device_port + ' shell iwpriv wlan0 setUnitTestCmd 19 3 1 0 0')
 				self.__pwr_state = pwr_state
 
+def get_wlan_device_list():
+	out = os.popen('adb devices')
+	cmd_list = out.read().split('\n')
+	dev_id = list()
+	for cmd in cmd_list:
+		if '\tdevice' in cmd:
+			dev_id.append(cmd[:cmd.find('\tdevice')])
+	
+	return dev_id
 class turn_table_device(object):
 	def __init__(self, com_port):
 		try:
