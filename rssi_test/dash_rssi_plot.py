@@ -3,15 +3,16 @@ from dash.dependencies import Input, Output, Event
 import dash_core_components as dcc
 import dash_html_components as html
 import plotly
-from rssi_plot import wlan_device
-import rssi_plot
+from dev_io import wlan_device
+import dev_io
 
 zipped_rssi_list = dict()
 rssi_dict = dict()
-app = dash.Dash()
+link_dict = dict()
+app = dash.Dash(__name__)
 wlan_dev_dict = dict()
-wlan_port = list()
-wlan_port = rssi_plot.get_wlan_device_list()
+update_cnt = 0
+wlan_port = dev_io.get_wlan_device_list()
 print wlan_port
 
 for port in wlan_port:
@@ -35,7 +36,8 @@ app.layout = html.Div(children=[
 	)
 def update_graph(data_names):
 	graphs = []
-	global rssi_dict
+
+	global update_cnt
 	if len(data_names)>2:
 		class_choice = 'col s12 m6 l4'
 	elif len(data_names)==2:
@@ -43,12 +45,19 @@ def update_graph(data_names):
 	else:
 		class_choice = 'col s12'
 
+
 	for data_name in data_names:
 		wlan_dev = wlan_dev_dict[data_name]
 		#if
 		tmp_list = wlan_dev.get_rssi()
 		if len(tmp_list) != 0:
 			rssi_dict.setdefault(data_name, []).append(tmp_list)
+			if update_cnt%5 == 0:
+				tmp_link_info_dict = wlan_dev.get_link_info()
+				link_info_str = 'dev_id:' + data_name + '  '
+				for key in tmp_link_info_dict:
+					link_info_str = link_info_str + key + ':' + tmp_link_info_dict[key] + '  '
+				link_dict[data_name] = link_info_str
 		if len(rssi_dict[data_name]) > 60:
 			rssi_dict[data_name].pop(0)
 		zipped_rssi_list[data_name] = list(zip(*rssi_dict[data_name]))
@@ -70,7 +79,7 @@ def update_graph(data_names):
 			mode='lines',
 			line = dict(
 				color = ('rgb(205, 12, 24)'),
-				width = 2,
+				width = 1,
 				)
 		)
 
@@ -79,6 +88,9 @@ def update_graph(data_names):
 			y=list(zipped_rssi_list[data_name][2]),
 			name='ch1_rssi',
 			mode='lines',
+			line = dict(
+				width = 1,
+				)
 
 		)
 		min_yaxis = min(list(zipped_rssi_list[data_name][1]))
@@ -90,17 +102,20 @@ def update_graph(data_names):
 		min_yaxis = min_yaxis-10
 		max_yaxis = max_yaxis+10
 		print min_yaxis, max_yaxis
+
 		rssi_layout = plotly.graph_objs.Layout(
 			xaxis=dict(range=[0,xaxis_max]),
 			yaxis=dict(range=[min_yaxis,max_yaxis], title='dbm'),
-			title='ch_rssi_'+data_name)
-	
+			title=link_dict[data_name],
+			titlefont=dict(size=22)
+		)
 		graphs.append(html.Div(dcc.Graph(
             id=data_name,
             animate=True,
             figure={'data': [ch0_rssi_data, ch1_rssi_data, cmb_rssi_data],'layout':rssi_layout}
             ), className=class_choice))
 	#return {'data':[ch0_rssi_data, ch1_rssi_data, cmb_rssi_data], 'layout':rssi_layout}
+	update_cnt = update_cnt + 1
 	return graphs
 if __name__ == '__main__':
 	#pass
