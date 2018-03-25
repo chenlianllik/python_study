@@ -77,9 +77,42 @@ class algo_sort:
 		print datetime.datetime.now() - cur_time		
 		return nums
 
+	def merge_sort(self, nums):
+		def _merge(nums, left, mid, right):
+			sorted_list = []
+			left_len = mid - left + 1
+			right_len = right - mid
+			i, j = 0, 0
+			print "left:%d mid:%d right:%d" % (left, mid, right)
+			while i < left_len and j < right_len:
+				print "i:%d j:%d" % (i,j)
+				if nums[left+i] <= nums[mid+j+1]:
+					sorted_list.append(nums[left+i])
+					i += 1
+				else:
+					sorted_list.append(nums[mid+j+1])
+					j += 1
+			while i < left_len:
+				sorted_list.append(nums[left+i])
+				i += 1
+			while j < right_len:
+				sorted_list.append(nums[mid+j+1])
+				j += 1
+			print sorted_list
+			for item in xrange(0,len(sorted_list)):
+				nums[left+item] = sorted_list[item]
+
+		def _merge_sort(nums, left, right):
+			if left < right:
+				mid = left + (right-left)/2
+				_merge_sort(nums, left, mid)
+				_merge_sort(nums, mid+1, right)
+				_merge(nums, left, mid, right)
+		_merge_sort(nums, 0, len(nums)-1)
+		return nums
 if __name__ == '__main__':
 	input_list = []
-	for x in range (0, 10):
+	for x in range(0, 10):
 		input_list.append(random.randint(0, 100))
 	
 	print "input_list:"
@@ -87,7 +120,8 @@ if __name__ == '__main__':
 	my_sort = algo_sort()
 	#print my_sort.select_sort(input_list)
 	#print my_sort.bubble_sort(input_list)
-	print my_sort.quick_sort(input_list)
+	#print my_sort.quick_sort(input_list)
+	print my_sort.merge_sort(input_list)
 	
 	
 	
