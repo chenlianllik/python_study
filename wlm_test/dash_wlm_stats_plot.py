@@ -6,117 +6,81 @@ import plotly
 from dev_io import wlan_device
 import dev_io
 
-zipped_rssi_list = dict()
-rssi_dict = dict()
-link_dict = dict()
+wlm_stats_list = []
 app = dash.Dash(__name__)
-wlan_dev_dict = dict()
-update_cnt = 0
-wlan_port = dev_io.get_wlan_device_list()
-print wlan_port
+#color_list = ['rgb(22, 96, 167)', 'rgb(205, 12, 24)']
 
-for port in wlan_port:
-	wlan_dev_dict[port] = wlan_device(port)
-rssi_list = list()
+wlan_dev = wlan_device('sim')
 app.layout = html.Div(children=[
-    html.H1(children='Dash RSSI monitor'),
-	dcc.Dropdown(id='wlan_dev',
-		options=[{'label': s, 'value': s} for s in wlan_port],
-		value=wlan_port,
-		multi=True),
-	html.Div(children=html.Div(id='rssi-graphs'), className='row'),
+    html.H1(children='wlm_stats_monitor'),
+	html.Div(children=html.Div(id='wlm_stats_graphs'), className='row'),
     #dcc.Graph(id='rssi-graph', animate=True),
-	dcc.Interval(id='rssi_update', interval=3000),
-])
+	dcc.Interval(id='wlm_stats_update', interval=3000),
+], className='column')
+
+def wlm_stats_graph(category, graph_name_list, xaxis_title, ext_name, mode):
+	xaxis_max = len(wlm_stats_list)
+	grap_data_list = []
+	min_yaxis = 100
+	max_yaxis = -100
+	graph_title = category
+	if ext_name != None:
+		graph_title = graph_title+':'+ext_name
+	for graph_name in graph_name_list:
+		y_data = [item[category][graph_name] for item in wlm_stats_list]
+		min_yaxis = min(min_yaxis, min(y_data))
+		max_yaxis = max(max_yaxis, max(y_data))
+		if mode == 'scatter':
+			grap_data = plotly.graph_objs.Scatter(
+				x=range(0, xaxis_max),
+				y=y_data,
+				name=graph_name,
+				mode='lines',
+				line = dict(
+					width = 3,
+					)
+			)
+		elif mode == 'bar':
+			grap_data = plotly.graph_objs.Bar(
+				x = range(0, xaxis_max),
+				y = y_data,
+				name = graph_name,
+			)		
+		grap_data_list.append(grap_data)
+	min_yaxis = min_yaxis-10
+	max_yaxis = max_yaxis+10
+	print min_yaxis, max_yaxis
+
+	grap_layout = plotly.graph_objs.Layout(
+		xaxis=dict(range=[0,xaxis_max]),
+		yaxis=dict(range=[min_yaxis,max_yaxis], title=xaxis_title),
+		title=graph_title,
+		titlefont=dict(size=22)
+	)
+	graph = dcc.Graph(
+            id=graph_title,
+            animate=True,
+            figure={'data': grap_data_list,'layout':grap_layout}
+            )
+	return graph
 
 @app.callback(
-	Output('rssi-graphs', 'children'),
-	[Input('wlan_dev', 'value')],
-	events=[Event('rssi_update', 'interval')]
+	Output('wlm_stats_graphs', 'children'),
+	events=[Event('wlm_stats_update', 'interval')]
 	)
-def update_graph(data_names):
-	graphs = []
+def update_graph():
+	graph_list = []
 
-	global update_cnt
-	if len(data_names)>2:
-		class_choice = 'col s12 m6 l4'
-	elif len(data_names)==2:
-		class_choice = 'col s12 m6 l6'
-	else:
-		class_choice = 'col s12'
+	ping_addr_list = ['google.com', 'qualcomm.com']
+	ping_latency = dict((ip_addr, wlan_dev.get_ping_latency(ip_addr)) for ip_addr in ping_addr_list)
+	wlm_stats_list.append({'ping_latency':ping_latency, 'wlm_stats':wlan_dev.get_wlm_stats()})
+	if len(wlm_stats_list) > 20:
+		wlm_stats_list.pop(0)
 
-
-	for data_name in data_names:
-		wlan_dev = wlan_dev_dict[data_name]
-		#if
-		tmp_list = wlan_dev.get_rssi()
-		if len(tmp_list) != 0:
-			rssi_dict.setdefault(data_name, []).append(tmp_list)
-			if update_cnt%5 == 0:
-				tmp_link_info_dict = wlan_dev.get_link_info()
-				link_info_str = 'dev_id:' + data_name + '  '
-				for key in tmp_link_info_dict:
-					link_info_str = link_info_str + key + ':' + tmp_link_info_dict[key] + '  '
-				link_dict[data_name] = link_info_str
-		if len(rssi_dict[data_name]) > 60:
-			rssi_dict[data_name].pop(0)
-		zipped_rssi_list[data_name] = list(zip(*rssi_dict[data_name]))
-		xaxis_max = len(list(zipped_rssi_list[data_name][3]))
-		cmb_rssi_data = plotly.graph_objs.Scatter(
-			x=range(0, xaxis_max),
-			y=list(zipped_rssi_list[data_name][3]),
-			name='cmb_rssi',
-			mode='lines',
-			line = dict(
-				color = ('rgb(22, 96, 167)'),
-				width = 5,
-				)
-		)
-		ch0_rssi_data = plotly.graph_objs.Scatter(
-			x=range(0, xaxis_max),
-			y=list(zipped_rssi_list[data_name][1]),
-			name='ch0_rssi',
-			mode='lines',
-			line = dict(
-				color = ('rgb(205, 12, 24)'),
-				width = 1,
-				)
-		)
-
-		ch1_rssi_data = plotly.graph_objs.Scatter(
-			x=range(0, xaxis_max),
-			y=list(zipped_rssi_list[data_name][2]),
-			name='ch1_rssi',
-			mode='lines',
-			line = dict(
-				width = 1,
-				)
-
-		)
-		min_yaxis = min(list(zipped_rssi_list[data_name][1]))
-		max_yaxis = max(list(zipped_rssi_list[data_name][1]))
-		min_yaxis = min(min_yaxis, min(list(zipped_rssi_list[data_name][2])))
-		max_yaxis = max(max_yaxis, max(list(zipped_rssi_list[data_name][2])))
-		min_yaxis = min(min_yaxis, min(list(zipped_rssi_list[data_name][3])))
-		max_yaxis = max(max_yaxis, max(list(zipped_rssi_list[data_name][3])))
-		min_yaxis = min_yaxis-10
-		max_yaxis = max_yaxis+10
-		print min_yaxis, max_yaxis
-
-		rssi_layout = plotly.graph_objs.Layout(
-			xaxis=dict(range=[0,xaxis_max]),
-			yaxis=dict(range=[min_yaxis,max_yaxis], title='dbm'),
-			title=link_dict[data_name],
-			titlefont=dict(size=22)
-		)
-		graphs.append(html.Div(dcc.Graph(
-            id=data_name,
-            animate=True,
-            figure={'data': [ch0_rssi_data, ch1_rssi_data, cmb_rssi_data],'layout':rssi_layout}
-            ), className=class_choice))
-	#return {'data':[ch0_rssi_data, ch1_rssi_data, cmb_rssi_data], 'layout':rssi_layout}
-	update_cnt = update_cnt + 1
-	return graphs
+	graph_list.append(html.Div(wlm_stats_graph('ping_latency', ping_addr_list, 'ms', None, 'scatter')))
+	graph_list.append(html.Div(wlm_stats_graph('wlm_stats', ['bcn_rssi'], 'dbm', 'bcn_rssi', 'scatter')))
+	graph_list.append(html.Div(wlm_stats_graph('wlm_stats', ['pwr_on_period', 'scan_on_period'], '%', 'pwr_scan_on_time', 'bar')))
+	return graph_list
 if __name__ == '__main__':
 	#pass
     app.run_server(debug=False,port=8050,host='0.0.0.0')

@@ -76,6 +76,7 @@ class wlan_device(object):
 		if self.device_port == 'sim':
 			out = os.popen('ping -n 1 -w 1 '+ ip_addr)
 			cmd_out = out.read()
+			print cmd_out
 			if "timed out" in cmd_out:
 				return -1
 			elif "time<" in cmd_out:
