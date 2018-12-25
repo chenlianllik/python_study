@@ -104,12 +104,12 @@ class wlan_device(object):
 	def get_wlm_ac_stats(self, cmd_str):
 		wlm_ac_stats_dict = {}
 		if self.device_port == 'sim':
-			wlm_ac_stats_dict['tx_mpdu'] = [random.randint(0, 20),random.randint(0, 40),random.randint(0, 60),random.randint(0, 20)],
-			wlm_ac_stats_dict['rx_mpdu'] = [random.randint(0, 20),random.randint(0, 40),random.randint(0, 60),random.randint(0, 20)],
-			wlm_ac_stats_dict['tx_ampdu'] = [random.randint(0, 10),random.randint(0, 30),random.randint(0, 50),random.randint(0, 10)],
-			wlm_ac_stats_dict['rx_ampdu'] = [random.randint(0, 10),random.randint(0, 30),random.randint(0, 50),random.randint(0, 10)],
-			wlm_ac_stats_dict['mpdu_lost'] = [random.randint(0, 10),random.randint(0, 30),random.randint(0, 50),random.randint(0, 10)],
-			wlm_ac_stats_dict['total_retries'] = [random.randint(0, 10),random.randint(0, 10),random.randint(0, 10),random.randint(0, 10)],
+			wlm_ac_stats_dict['tx_mpdu'] = [random.randint(0, 20),random.randint(0, 40),random.randint(0, 60),random.randint(0, 20)]
+			wlm_ac_stats_dict['rx_mpdu'] = [random.randint(0, 20),random.randint(0, 40),random.randint(0, 60),random.randint(0, 20)]
+			wlm_ac_stats_dict['tx_ampdu'] = [random.randint(0, 10),random.randint(0, 30),random.randint(0, 50),random.randint(0, 10)]
+			wlm_ac_stats_dict['rx_ampdu'] = [random.randint(0, 10),random.randint(0, 30),random.randint(0, 50),random.randint(0, 10)]
+			wlm_ac_stats_dict['mpdu_lost'] = [random.randint(0, 10),random.randint(0, 30),random.randint(0, 50),random.randint(0, 10)]
+			wlm_ac_stats_dict['total_retries'] = [random.randint(0, 10),random.randint(0, 10),random.randint(0, 10),random.randint(0, 10)]
 			wlm_ac_stats_dict['contention_time_avg'] = [random.randint(0, 100),random.randint(0, 100),random.randint(0, 100),random.randint(0, 100)]
 			#self.__last_wlm_stats_req_time = time.time()
 		else:
