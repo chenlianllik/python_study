@@ -10,7 +10,7 @@ class wlan_device(object):
 		if device_port == 'sim':
 			self.device_port = device_port
 			self.__pwr_state = 'off'
-			self.__last_wlm_stats_req_time = time.time()
+			self.__wlm_stats_req_time = time.time()
 			return None
 		out = os.popen('adb devices')
 		cmd_out = out.read()
@@ -74,11 +74,11 @@ class wlan_device(object):
 	
 	def get_ping_latency(self, ip_addr):
 		if self.device_port == 'sim':
-			out = os.popen('ping -n 1 -w 1 '+ ip_addr)
+			out = os.popen('ping -n 1 -w 2 '+ ip_addr)
 			cmd_out = out.read()
 			#print cmd_out
 			if "timed out" in cmd_out:
-				return -1
+				return 2000
 			elif "time<" in cmd_out:
 				return 1
 			else:
@@ -91,7 +91,7 @@ class wlan_device(object):
 	def get_wlm_link_stats(self, cmd_str):
 		wlm_link_stats_dict = {}
 		if self.device_port == 'sim':
-			wlm_link_stats_dict['req_interval'] = time.time() - self.__last_wlm_stats_req_time
+			wlm_link_stats_dict['timestamp'] = time.time() - self.__wlm_stats_req_time
 			wlm_link_stats_dict['pwr_on_period'] =  random.randint(0, 100)
 			wlm_link_stats_dict['congestion_level'] =  random.randint(0, 50)
 			wlm_link_stats_dict['bcn_rssi'] =  random.randint(-96, 0)

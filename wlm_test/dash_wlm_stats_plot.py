@@ -5,9 +5,16 @@ import dash_html_components as html
 import plotly
 from dev_io import wlan_device
 import dev_io
+import csv
+import os
 
-wlm_stats_list = []
+wlm_stats_plot_list = []
+wlm_stats_cache_list = []
+
 id_ac_map = ['VO','VI','BE','BK']
+ping_addr_dict = {'gaming_server':'49.51.196.180', 'AP':'192.168.1.1'}
+result_csv_file_name = "ping_test_result.csv"
+
 app = dash.Dash(__name__)
 #color_list = ['rgb(22, 96, 167)', 'rgb(205, 12, 24)']
 app.css.append_css({'external_url': 'https://cdn.rawgit.com/plotly/dash-app-stylesheets/2d266c578d2a6e8850ebce48fdb52759b2aef506/stylesheet-oil-and-gas.css'})  # noqa: E501
@@ -50,11 +57,11 @@ app.layout = html.Div(children=[
 		], className='six columns'),
 	], className='row'),
     #dcc.Graph(id='rssi-graph', animate=True),
-	dcc.Interval(id='wlm_stats_update', interval=3000),
+	dcc.Interval(id='wlm_stats_update', interval=2000),
 ])
 
 def wlm_link_stats_graph(category, graph_name_list, xaxis_title, ext_name, mode):
-	xaxis_max = len(wlm_stats_list)
+	xaxis_max = len(wlm_stats_plot_list)
 	if xaxis_max == 0:
 		return
 	grap_data_list = []
@@ -64,7 +71,7 @@ def wlm_link_stats_graph(category, graph_name_list, xaxis_title, ext_name, mode)
 	if ext_name != None:
 		graph_title = graph_title+':'+ext_name
 	for graph_name in graph_name_list:
-		y_data = [item[category][graph_name] for item in wlm_stats_list]
+		y_data = [item[category][graph_name] for item in wlm_stats_plot_list]
 		min_yaxis = min(min_yaxis, min(y_data))
 		max_yaxis = max(max_yaxis, max(y_data))
 		if mode == 'scatter':
@@ -101,16 +108,16 @@ def wlm_link_stats_graph(category, graph_name_list, xaxis_title, ext_name, mode)
 	return graph
 
 def wlm_ac_stats_graph(graph_name):
-	xaxis_max = len(wlm_stats_list)
+	xaxis_max = len(wlm_stats_plot_list)
 	if xaxis_max == 0:
 		return
 	grap_data_list = []
 	min_yaxis = 1000000000
 	max_yaxis = -1000000000
-	graph_title = graph_name
+	graph_title = 'wlm_ac_stats:'+graph_name
 	print graph_name
 	for i in xrange(len(id_ac_map)):
-		y_data = [item['wlm_ac_stats'][graph_name][i] for item in wlm_stats_list]
+		y_data = [item['wlm_ac_stats'][graph_name][i] for item in wlm_stats_plot_list]
 		min_yaxis = min(min_yaxis, min(y_data))
 		max_yaxis = max(max_yaxis, max(y_data))
 		grap_data = plotly.graph_objs.Scatter(
@@ -139,6 +146,26 @@ def wlm_ac_stats_graph(graph_name):
     )
 	return graph
 
+csv_columns = ['timestamp','gaming_server','AP','bcn_rssi', 'pwr_on_period', 'scan_on_period', 'congestion_level', 'total_retries', 'mpdu_lost', 'rx_ampdu', 'rx_mpdu', 'tx_mpdu', 'tx_ampdu', 'contention_time_avg']
+def update_analysis_result(wlm_stats_result_dict):
+	#pass
+	global wlm_stats_cache_list
+	wlm_stats_cache_list.append(wlm_stats_result_dict)
+
+	first_write = False
+	if not os.path.exists(result_csv_file_name):
+		first_write = True
+	print len(wlm_stats_cache_list)
+	if len(wlm_stats_cache_list) >= 20:
+
+		with open(result_csv_file_name, 'ab') as csvfile:
+			writer = csv.DictWriter(csvfile, fieldnames=csv_columns)
+			if first_write:
+				writer.writeheader()
+			for data in wlm_stats_cache_list:
+				writer.writerow(data)
+		wlm_stats_cache_list = []
+
 @app.callback(
 	Output('wlm_link_stats_graphs', 'children'),
 	[Input('plot_checkbox', 'values')],
@@ -146,15 +173,19 @@ def wlm_ac_stats_graph(graph_name):
 	)
 def update_wlm_link_stats_graph(plot_list):
 	graph_list = []
-
-	ping_addr_list = ['www.google.com', 'www.qualcomm.com']
-	ping_latency = dict((ip_addr, wlan_dev.get_ping_latency(ip_addr)) for ip_addr in ping_addr_list)
+	if len(wlm_stats_plot_list) == 0:
+		if os.path.exists(result_csv_file_name):
+			os.remove(result_csv_file_name)
+	ping_latency = dict((ip_addr, wlan_dev.get_ping_latency(ping_addr_dict[ip_addr])) for ip_addr in ping_addr_dict.keys())
 	link_stats, ac_stats = wlan_dev.get_wlm_stats()
-	wlm_stats_list.append({'ping_latency':ping_latency, 'wlm_link_stats':link_stats, 'wlm_ac_stats':ac_stats})
-	if len(wlm_stats_list) > 60:
-		wlm_stats_list.pop(0)
+	wlm_stats_plot_list.append({'ping_latency':ping_latency, 'wlm_link_stats':link_stats, 'wlm_ac_stats':ac_stats})
+	update_analysis_result(dict(ping_latency.items()+link_stats.items()+ac_stats.items()))
+
+	#print wlm_stats_cache_list
+	if len(wlm_stats_plot_list) > 60:
+		wlm_stats_plot_list.pop(0)
 	if 'ping_latency' in plot_list:
-		graph_list.append(html.Div(wlm_link_stats_graph('ping_latency', ping_addr_list, 'ms', None, 'scatter'), className = 'row'))
+		graph_list.append(html.Div(wlm_link_stats_graph('ping_latency', ['gaming_server', 'AP'], 'ms', None, 'scatter'), className = 'row'))
 	if 'wlm_link_stats' in plot_list:
 		graph_list.append(html.Div(wlm_link_stats_graph('wlm_link_stats', ['bcn_rssi'], 'dbm', 'bcn_rssi', 'scatter'), className = 'row'))
 		graph_list.append(html.Div(wlm_link_stats_graph('wlm_link_stats', ['pwr_on_period','scan_on_period', 'congestion_level'], '%', 'pwr_scan_on_time', 'bar'), className = 'row'))
