@@ -1,5 +1,5 @@
 import dash
-from dash.dependencies import Input, Output, Event
+from dash.dependencies import Input, Output, Event, State
 import dash_core_components as dcc
 import dash_html_components as html
 import plotly
@@ -7,12 +7,17 @@ from dev_io import wlan_device
 import dev_io
 import csv
 import os
+import numpy as np
 
 wlm_stats_plot_list = []
 wlm_stats_cache_list = []
+wlm_stats_ping_cdf_dict = {
+	'gaming_server':[],
+	'AP':[]
+}
 
 id_ac_map = ['VO','VI','BE','BK']
-ping_addr_dict = {'gaming_server':'49.51.196.180', 'AP':'192.168.1.1'}
+ping_addr_dict = {'gaming_server':'qualcomm.com', 'AP':'VI-HASTINGS-08'}
 result_csv_file_name = "ping_test_result.csv"
 
 app = dash.Dash(__name__)
@@ -20,17 +25,30 @@ app = dash.Dash(__name__)
 app.css.append_css({'external_url': 'https://cdn.rawgit.com/plotly/dash-app-stylesheets/2d266c578d2a6e8850ebce48fdb52759b2aef506/stylesheet-oil-and-gas.css'})  # noqa: E501
 wlan_dev = wlan_device('sim')
 app.layout = html.Div(children=[
-    html.H1(children='wlm_stats_monitor', className = 'row'),
+    html.H1(children='WLAN ping latency dashboard', className = 'row'),
+	html.Div(children = [
+		html.H4(children='ping result', className = 'row'),
+		html.Div(children = [
+			html.Label('set IP addres:'),
+			dcc.Input(id='gaming_server_input', type='text', value=ping_addr_dict['gaming_server']),
+			dcc.Input(id='AP_input', type='text', value=ping_addr_dict['AP']),
+			html.Div(id='ping_output'),
+		], className='row'),
+		html.Div(children = html.Div(id='wlm_ping_stats_graphs'), className='row'),
+	],className = 'row'),
+	html.H4(children='wlm stats', className = 'row'),
 	html.Div(children = [
 		html.Div(children = [
 			html.Div(children = [
 				dcc.Checklist(
-					id = 'plot_checkbox',
+					id = 'link_checkbox',
 					options=[
-						{'label': 'ping_latency', 'value': 'ping_latency'},
-						{'label': 'wlm_link_stats', 'value': 'wlm_link_stats'},
+						{'label': 'bcn_rssi', 'value': 'bcn_rssi'},
+						{'label': 'pwr_on_period', 'value': 'pwr_on_period'},
+						{'label': 'scan_on_period', 'value': 'scan_on_period'},
+						{'label': 'congestion_level', 'value': 'congestion_level'},
 					],
-					values=['ping_latency', 'wlm_link_stats'],
+					values=['bcn_rssi', 'congestion_level', 'pwr_on_period'],
 					labelStyle={'display': 'inline-block'},
 				),
 			], className='row'),
@@ -60,6 +78,38 @@ app.layout = html.Div(children=[
 	dcc.Interval(id='wlm_stats_update', interval=2000),
 ])
 
+def wlm_ping_cdf_graph():
+	grap_data_list = []
+
+	for key in wlm_stats_ping_cdf_dict.keys():
+		data = wlm_stats_ping_cdf_dict[key]
+		hist, bin_edges = np.histogram(data, bins = range(100))
+		#print hist
+		cdf = np.cumsum(hist)
+		grap_data = plotly.graph_objs.Scatter(
+			x=bin_edges[1:],
+			y=cdf*100/len(data),
+			name=key,
+			line = dict(
+				width = 2,
+				)
+		)
+		grap_data_list.append(grap_data)
+		#print cdf*100/len(data)
+	grap_layout = plotly.graph_objs.Layout(
+		xaxis=dict(range=[0,101]),
+		yaxis=dict(range=[0,101], title='%'),
+		title='ping_latency_cdf',
+		titlefont=dict(size=22),
+		legend={'x': 10, 'y': 1}
+	)
+	graph = dcc.Graph(
+		id='ping_cdf',
+		animate=False,
+		figure={'data': grap_data_list,'layout':grap_layout}
+    )
+	return graph
+
 def wlm_link_stats_graph(category, graph_name_list, xaxis_title, ext_name, mode):
 	xaxis_max = len(wlm_stats_plot_list)
 	if xaxis_max == 0:
@@ -80,7 +130,7 @@ def wlm_link_stats_graph(category, graph_name_list, xaxis_title, ext_name, mode)
 				y=y_data,
 				name=graph_name,
 				line = dict(
-					width = 3,
+					width = 2,
 					)
 			)
 		elif mode == 'bar':
@@ -125,7 +175,7 @@ def wlm_ac_stats_graph(graph_name):
 			y=y_data,
 			name=id_ac_map[i],
 			line = dict(
-				width = 3,
+				width = 2,
 				)
 		)
 		grap_data_list.append(grap_data)
@@ -152,6 +202,7 @@ def update_analysis_result(wlm_stats_result_dict):
 	global wlm_stats_cache_list
 	wlm_stats_cache_list.append(wlm_stats_result_dict)
 
+	#save to csv file
 	first_write = False
 	if not os.path.exists(result_csv_file_name):
 		first_write = True
@@ -166,12 +217,32 @@ def update_analysis_result(wlm_stats_result_dict):
 				writer.writerow(data)
 		wlm_stats_cache_list = []
 
+	wlm_stats_ping_cdf_dict['gaming_server'].append(wlm_stats_result_dict['gaming_server'])
+	wlm_stats_ping_cdf_dict['AP'].append(wlm_stats_result_dict['AP'])
+	if len(wlm_stats_ping_cdf_dict['gaming_server']) > 500:
+		wlm_stats_ping_cdf_dict['gaming_server'].pop(0)
+		wlm_stats_ping_cdf_dict['AP'].pop(0)
+
+@app.callback(Output('ping_output', 'children'),
+              [Input('gaming_server_input', 'n_submit'), Input('gaming_server_input', 'n_blur'),
+               Input('AP_input', 'n_submit'), Input('AP_input', 'n_blur')],
+              [State('gaming_server_input', 'value'),
+               State('AP_input', 'value')],
+			   events=[Event('wlm_stats_update', 'interval')]
+			  )
+def update_output(ns1, nb1, ns2, nb2, input1, input2):
+	ping_addr_dict['gaming_server'] = input1
+	ping_addr_dict['AP'] = input2
+	return '''
+		gaming_server IP is "{}",
+		and AP IP is "{}"
+	'''.format( ping_addr_dict['gaming_server'], ping_addr_dict['AP'])
+
 @app.callback(
-	Output('wlm_link_stats_graphs', 'children'),
-	[Input('plot_checkbox', 'values')],
+	Output('wlm_ping_stats_graphs', 'children'),
 	events=[Event('wlm_stats_update', 'interval')]
 	)
-def update_wlm_link_stats_graph(plot_list):
+def update_wlm_ping_stats_graph():
 	graph_list = []
 	if len(wlm_stats_plot_list) == 0:
 		if os.path.exists(result_csv_file_name):
@@ -181,14 +252,28 @@ def update_wlm_link_stats_graph(plot_list):
 	wlm_stats_plot_list.append({'ping_latency':ping_latency, 'wlm_link_stats':link_stats, 'wlm_ac_stats':ac_stats})
 	update_analysis_result(dict(ping_latency.items()+link_stats.items()+ac_stats.items()))
 
+	graph_list.append(html.Div(wlm_link_stats_graph('ping_latency', ['AP', 'gaming_server'], 'ms', None, 'scatter'), className = 'six columns'))
+	graph_list.append(html.Div(wlm_ping_cdf_graph(), className = 'six columns'))
+	return graph_list
+
+@app.callback(
+	Output('wlm_link_stats_graphs', 'children'),
+	[Input('link_checkbox', 'values')],
+	events=[Event('wlm_stats_update', 'interval')]
+	)
+def update_wlm_link_stats_graph(link_list):
+	graph_list = []
 	#print wlm_stats_cache_list
 	if len(wlm_stats_plot_list) > 60:
 		wlm_stats_plot_list.pop(0)
-	if 'ping_latency' in plot_list:
-		graph_list.append(html.Div(wlm_link_stats_graph('ping_latency', ['gaming_server', 'AP'], 'ms', None, 'scatter'), className = 'row'))
-	if 'wlm_link_stats' in plot_list:
+	if 'bcn_rssi' in link_list:
 		graph_list.append(html.Div(wlm_link_stats_graph('wlm_link_stats', ['bcn_rssi'], 'dbm', 'bcn_rssi', 'scatter'), className = 'row'))
-		graph_list.append(html.Div(wlm_link_stats_graph('wlm_link_stats', ['pwr_on_period','scan_on_period', 'congestion_level'], '%', 'pwr_scan_on_time', 'bar'), className = 'row'))
+	if 'congestion_level' in link_list:
+		graph_list.append(html.Div(wlm_link_stats_graph('wlm_link_stats', ['congestion_level'], '%', 'congestion_level', 'bar'), className = 'row'))
+	if 'pwr_on_period' in link_list:
+		graph_list.append(html.Div(wlm_link_stats_graph('wlm_link_stats', ['pwr_on_period'], '%', 'pwr_on_period', 'bar'), className = 'row'))
+	if 'scan_on_period' in link_list:
+		graph_list.append(html.Div(wlm_link_stats_graph('wlm_link_stats', ['scan_on_period'], '%', 'scan_on_period', 'bar'), className = 'row'))
 	return graph_list
 
 @app.callback(

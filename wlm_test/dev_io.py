@@ -76,9 +76,9 @@ class wlan_device(object):
 		if self.device_port == 'sim':
 			out = os.popen('ping -n 1 -w 2 '+ ip_addr)
 			cmd_out = out.read()
-			#print cmd_out
+			print cmd_out
 			if "timed out" in cmd_out:
-				return 2000
+				return 1000
 			elif "time<" in cmd_out:
 				return 1
 			else:
@@ -99,7 +99,7 @@ class wlan_device(object):
 			#self.__last_wlm_stats_req_time = time.time()
 		else:
 			pass
-		print wlm_link_stats_dict
+		#print wlm_link_stats_dict
 		return wlm_link_stats_dict
 	def get_wlm_ac_stats(self, cmd_str):
 		wlm_ac_stats_dict = {}
