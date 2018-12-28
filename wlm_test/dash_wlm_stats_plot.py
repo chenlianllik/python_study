@@ -2,6 +2,7 @@ import dash
 from dash.dependencies import Input, Output, Event, State
 import dash_core_components as dcc
 import dash_html_components as html
+import dash_table
 import plotly
 from dev_io import wlan_device
 import dev_io
@@ -11,21 +12,25 @@ import numpy as np
 
 wlm_stats_plot_list = []
 wlm_stats_cache_list = []
+wlm_stats_high_latency_list = []
+high_latency_threshold = 60
 wlm_stats_ping_cdf_dict = {
 	'gaming_server':[],
 	'AP':[]
 }
-
+total_ping_cnt = 0
+tolal_high_latency_cnt = 0
 id_ac_map = ['VO','VI','BE','BK']
 ping_addr_dict = {'gaming_server':'qualcomm.com', 'AP':'VI-HASTINGS-08'}
 result_csv_file_name = "ping_test_result.csv"
+
 
 app = dash.Dash(__name__)
 #color_list = ['rgb(22, 96, 167)', 'rgb(205, 12, 24)']
 app.css.append_css({'external_url': 'https://cdn.rawgit.com/plotly/dash-app-stylesheets/2d266c578d2a6e8850ebce48fdb52759b2aef506/stylesheet-oil-and-gas.css'})  # noqa: E501
 wlan_dev = wlan_device('sim')
 app.layout = html.Div(children=[
-    html.H1(children='WLAN ping latency dashboard', className = 'row'),
+	html.H1("WLAN ping latency dashboard", style={'textAlign': 'center','color': '#f2f2f2', 'backgroundColor':'#003366'}, className='row'),
 	html.Div(children = [
 		html.H4(children='ping result', className = 'row'),
 		html.Div(children = [
@@ -36,6 +41,7 @@ app.layout = html.Div(children=[
 		], className='row'),
 		html.Div(children = html.Div(id='wlm_ping_stats_graphs'), className='row'),
 	],className = 'row'),
+	html.Hr(),
 	html.H4(children='wlm stats', className = 'row'),
 	html.Div(children = [
 		html.Div(children = [
@@ -74,9 +80,23 @@ app.layout = html.Div(children=[
 			html.Div(children = html.Div(id='wlm_ac_stats_graphs'), className='row'),
 		], className='six columns'),
 	], className='row'),
+	html.Hr(),
+	html.H4(children='high latency results', className = 'row'),
+	html.Div(id='high_latency_threshold_output',className = 'row'),
+	html.Div(children = [
+		dcc.Slider(
+			id = 'high_latency_threshold_slider',
+			min=0,
+			max=10,
+			marks={i: '{}ms'.format(i*30) for i in range(11)},
+			value=high_latency_threshold/30,
+		),
+	],className='row'),
+	html.Hr(),
+	html.Div(children = [html.Label(' '),html.Div(id='wlm_high_latency_dashtable')], className='row'),
     #dcc.Graph(id='rssi-graph', animate=True),
 	dcc.Interval(id='wlm_stats_update', interval=2000),
-])
+], style={'backgroundColor':'#f0f0f5'})
 
 def wlm_ping_cdf_graph():
 	grap_data_list = []
@@ -165,7 +185,7 @@ def wlm_ac_stats_graph(graph_name):
 	min_yaxis = 1000000000
 	max_yaxis = -1000000000
 	graph_title = 'wlm_ac_stats:'+graph_name
-	print graph_name
+	#print graph_name
 	for i in xrange(len(id_ac_map)):
 		y_data = [item['wlm_ac_stats'][graph_name][i] for item in wlm_stats_plot_list]
 		min_yaxis = min(min_yaxis, min(y_data))
@@ -187,7 +207,9 @@ def wlm_ac_stats_graph(graph_name):
 		yaxis=dict(range=[min_yaxis,max_yaxis]),
 		title=graph_title,
 		titlefont=dict(size=22),
-		legend={'x': 0, 'y': 1}
+		legend={'x': 0, 'y': 1},
+		paper_bgcolor="white",
+        plot_bgcolor="white",
 	)
 	graph = dcc.Graph(
 		id=graph_title,
@@ -197,18 +219,22 @@ def wlm_ac_stats_graph(graph_name):
 	return graph
 
 csv_columns = ['timestamp','gaming_server','AP','bcn_rssi', 'pwr_on_period', 'scan_on_period', 'congestion_level', 'total_retries', 'mpdu_lost', 'rx_ampdu', 'rx_mpdu', 'tx_mpdu', 'tx_ampdu', 'contention_time_avg']
+high_latency_columns = []
 def update_analysis_result(wlm_stats_result_dict):
 	#pass
+	print wlm_stats_result_dict
 	global wlm_stats_cache_list
+	global total_ping_cnt
+	global tolal_high_latency_cnt
+	total_ping_cnt += 1
 	wlm_stats_cache_list.append(wlm_stats_result_dict)
 
 	#save to csv file
 	first_write = False
 	if not os.path.exists(result_csv_file_name):
 		first_write = True
-	print len(wlm_stats_cache_list)
+	#print len(wlm_stats_cache_list)
 	if len(wlm_stats_cache_list) >= 20:
-
 		with open(result_csv_file_name, 'ab') as csvfile:
 			writer = csv.DictWriter(csvfile, fieldnames=csv_columns)
 			if first_write:
@@ -217,11 +243,33 @@ def update_analysis_result(wlm_stats_result_dict):
 				writer.writerow(data)
 		wlm_stats_cache_list = []
 
+	#ping latency cdf result
 	wlm_stats_ping_cdf_dict['gaming_server'].append(wlm_stats_result_dict['gaming_server'])
 	wlm_stats_ping_cdf_dict['AP'].append(wlm_stats_result_dict['AP'])
 	if len(wlm_stats_ping_cdf_dict['gaming_server']) > 500:
 		wlm_stats_ping_cdf_dict['gaming_server'].pop(0)
 		wlm_stats_ping_cdf_dict['AP'].pop(0)
+
+	#high latency items
+	if wlm_stats_result_dict['gaming_server'] > high_latency_threshold:
+		convert_dict = {}
+		gen_columns = False
+		if len(high_latency_columns) == 0:
+			gen_columns = True
+		for key in csv_columns:
+			if type(wlm_stats_result_dict[key]) is list:
+				for i in xrange(len(wlm_stats_result_dict[key])):
+					convert_dict[key+id_ac_map[i]] = wlm_stats_result_dict[key][i]
+					if gen_columns:
+						high_latency_columns.append({"name":[key,id_ac_map[i]], "id":key+id_ac_map[i]})
+			else:
+				convert_dict[key] = wlm_stats_result_dict[key]
+				if gen_columns:
+					high_latency_columns.append({"name":["", key], "id":key})
+		wlm_stats_high_latency_list.append(convert_dict)
+		tolal_high_latency_cnt+=1
+		if len(wlm_stats_high_latency_list) > 500:
+			wlm_stats_high_latency_list.pop(0)
 
 @app.callback(Output('ping_output', 'children'),
               [Input('gaming_server_input', 'n_submit'), Input('gaming_server_input', 'n_blur'),
@@ -230,7 +278,7 @@ def update_analysis_result(wlm_stats_result_dict):
                State('AP_input', 'value')],
 			   events=[Event('wlm_stats_update', 'interval')]
 			  )
-def update_output(ns1, nb1, ns2, nb2, input1, input2):
+def update_ping_addr_output(ns1, nb1, ns2, nb2, input1, input2):
 	ping_addr_dict['gaming_server'] = input1
 	ping_addr_dict['AP'] = input2
 	return '''
@@ -286,6 +334,65 @@ def update_wlm_ac_stats_graph(ac_list):
 	for ac_name in ac_list:
 		graph_list.append(html.Div(wlm_ac_stats_graph(ac_name), className = 'row'))
 	return graph_list
+
+@app.callback(
+	Output('high_latency_threshold_output', 'children'),
+	[Input('high_latency_threshold_slider', 'value')],
+	events=[Event('wlm_stats_update', 'interval')]
+	)
+def update_high_latency_output(threshold):
+	global high_latency_threshold
+	global tolal_high_latency_cnt
+	global total_ping_cnt
+	if threshold*30 != high_latency_threshold:
+		high_latency_threshold = threshold*30
+	if total_ping_cnt == 0:
+		high_latency_percent = 0
+	else:
+		high_latency_percent = float(tolal_high_latency_cnt)/total_ping_cnt
+		high_latency_percent = high_latency_percent * 100
+	return '''
+		high latency threshold {}ms, {}% of total ping iterations is higher than threshold
+		'''.format(high_latency_threshold, high_latency_percent)
+@app.callback(
+	Output('wlm_high_latency_dashtable', 'children'),
+	events=[Event('wlm_stats_update', 'interval')]
+	)
+def update_high_latency_dashtable():
+	#print high_latency_columns
+	if len(wlm_stats_high_latency_list) != 0:
+		#print tmp_col
+		return dash_table.DataTable(
+			id='high_latency_list',
+			#columns=csv_columns,
+			columns=high_latency_columns,
+			data=wlm_stats_high_latency_list,
+			merge_duplicate_headers=True,
+			sorting=True,
+			sorting_type="multi",
+			style_table={
+				'maxHeight': '400',
+				'overflowY': 'scroll',
+				'border': 'thin lightgrey solid'
+			},
+			style_cell={'textAlign': 'left'},
+			style_cell_conditional=[
+				{
+					'if': {'column_id': 'Region'},
+					'textAlign': 'left'
+				}
+			] + [
+				{
+					'if': {'row_index': 'odd'},
+					'backgroundColor': 'rgb(248, 248, 248)'
+				}
+			],
+			style_header={
+				'backgroundColor': 'white',
+				'fontWeight': 'bold'
+			}
+		)
+
 if __name__ == '__main__':
 	#pass
     app.run_server(debug=False,port=8050,host='0.0.0.0')

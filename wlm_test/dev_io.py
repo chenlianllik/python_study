@@ -91,7 +91,7 @@ class wlan_device(object):
 	def get_wlm_link_stats(self, cmd_str):
 		wlm_link_stats_dict = {}
 		if self.device_port == 'sim':
-			wlm_link_stats_dict['timestamp'] = time.time() - self.__wlm_stats_req_time
+			wlm_link_stats_dict['timestamp'] = "{0:.3f}".format(time.time() - self.__wlm_stats_req_time)
 			wlm_link_stats_dict['pwr_on_period'] =  random.randint(0, 100)
 			wlm_link_stats_dict['congestion_level'] =  random.randint(0, 50)
 			wlm_link_stats_dict['bcn_rssi'] =  random.randint(-96, 0)
@@ -114,7 +114,7 @@ class wlan_device(object):
 			#self.__last_wlm_stats_req_time = time.time()
 		else:
 			pass
-		print wlm_ac_stats_dict
+		#print wlm_ac_stats_dict
 		return wlm_ac_stats_dict
 
 	def get_wlm_stats(self):
