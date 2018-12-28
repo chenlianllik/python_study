@@ -20,6 +20,7 @@ wlm_stats_ping_cdf_dict = {
 }
 total_ping_cnt = 0
 tolal_high_latency_cnt = 0
+current_test_state = 'start'
 id_ac_map = ['VO','VI','BE','BK']
 ping_addr_dict = {'gaming_server':'qualcomm.com', 'AP':'VI-HASTINGS-08'}
 result_csv_file_name = "ping_test_result.csv"
@@ -34,10 +35,25 @@ app.layout = html.Div(children=[
 	html.Div(children = [
 		html.H4(children='ping result', className = 'row'),
 		html.Div(children = [
-			html.Label('set IP addres:'),
-			dcc.Input(id='gaming_server_input', type='text', value=ping_addr_dict['gaming_server']),
-			dcc.Input(id='AP_input', type='text', value=ping_addr_dict['AP']),
-			html.Div(id='ping_output'),
+			html.Div(children = [
+				html.Div(children = [
+					html.Label('gaming server IP address:', className = 'two columns'),
+					html.Label('local AP IP address:', className = 'two columns'),
+					html.Div(id='test_state_output', className = 'six columns'),
+				],className = 'row'),
+				html.Div(children = [
+					html.Div(children = [
+						dcc.Input(id='gaming_server_input', type='text', value=ping_addr_dict['gaming_server']),
+					],className='two columns'),	
+					html.Div(children = [
+						dcc.Input(id='AP_input', type='text', value=ping_addr_dict['AP']),
+					],className='two columns'),	
+					html.Button('start', id='start_button', n_clicks_timestamp='0', className = 'one column'),
+					html.Button('stop', id='stop_button', n_clicks_timestamp='0',className = 'one column'),
+					html.Button('restart', id='restart_button', n_clicks_timestamp='0',className = 'one column'),
+				],className = 'row'),
+			], className = 'row'),
+			html.Div(id='ping_output',className='row'),
 		], className='row'),
 		html.Div(children = html.Div(id='wlm_ping_stats_graphs'), className='row'),
 	],className = 'row'),
@@ -271,6 +287,24 @@ def update_analysis_result(wlm_stats_result_dict):
 		if len(wlm_stats_high_latency_list) > 500:
 			wlm_stats_high_latency_list.pop(0)
 
+def restart_test():
+	print "restart_test"
+	global wlm_stats_plot_list
+	global wlm_stats_cache_list
+	global wlm_stats_high_latency_list
+	global wlm_stats_ping_cdf_dict
+	global total_ping_cnt
+	global tolal_high_latency_cnt
+	wlm_stats_plot_list = []
+	wlm_stats_cache_list = []
+	wlm_stats_high_latency_list = []
+	wlm_stats_ping_cdf_dict['gaming_server'] = []
+	wlm_stats_ping_cdf_dict['AP'] = []
+	total_ping_cnt = 0
+	tolal_high_latency_cnt = 0
+	if os.path.exists(result_csv_file_name):
+		os.remove(result_csv_file_name)
+
 @app.callback(Output('ping_output', 'children'),
               [Input('gaming_server_input', 'n_submit'), Input('gaming_server_input', 'n_blur'),
                Input('AP_input', 'n_submit'), Input('AP_input', 'n_blur')],
@@ -282,9 +316,27 @@ def update_ping_addr_output(ns1, nb1, ns2, nb2, input1, input2):
 	ping_addr_dict['gaming_server'] = input1
 	ping_addr_dict['AP'] = input2
 	return '''
-		gaming_server IP is "{}",
-		and AP IP is "{}"
+		gaming_server address is "{}",
+		and AP address is "{}"
 	'''.format( ping_addr_dict['gaming_server'], ping_addr_dict['AP'])
+
+@app.callback(Output('test_state_output', 'children'),
+              [Input('start_button', 'n_clicks_timestamp'),
+               Input('stop_button', 'n_clicks_timestamp'),
+               Input('restart_button', 'n_clicks_timestamp')])
+def displayClick(btn1, btn2, btn3):
+	global current_test_state
+	if int(btn1) > int(btn2) and int(btn1) > int(btn3):
+		current_test_state = 'start'
+	elif int(btn2) > int(btn1) and int(btn2) > int(btn3):
+		current_test_state = 'stop'
+	elif int(btn3) > int(btn1) and int(btn3) > int(btn2):
+		restart_test()
+		current_test_state = 'start'
+	print current_test_state
+	return '''
+		current test state "{}"
+	'''.format(current_test_state)
 
 @app.callback(
 	Output('wlm_ping_stats_graphs', 'children'),
@@ -292,16 +344,18 @@ def update_ping_addr_output(ns1, nb1, ns2, nb2, input1, input2):
 	)
 def update_wlm_ping_stats_graph():
 	graph_list = []
+	global current_test_state
 	if len(wlm_stats_plot_list) == 0:
 		if os.path.exists(result_csv_file_name):
 			os.remove(result_csv_file_name)
-	ping_latency = dict((ip_addr, wlan_dev.get_ping_latency(ping_addr_dict[ip_addr])) for ip_addr in ping_addr_dict.keys())
-	link_stats, ac_stats = wlan_dev.get_wlm_stats()
-	wlm_stats_plot_list.append({'ping_latency':ping_latency, 'wlm_link_stats':link_stats, 'wlm_ac_stats':ac_stats})
-	update_analysis_result(dict(ping_latency.items()+link_stats.items()+ac_stats.items()))
+	if current_test_state == 'start':
+		ping_latency = dict((ip_addr, wlan_dev.get_ping_latency(ping_addr_dict[ip_addr])) for ip_addr in ping_addr_dict.keys())
+		link_stats, ac_stats = wlan_dev.get_wlm_stats()
+		wlm_stats_plot_list.append({'ping_latency':ping_latency, 'wlm_link_stats':link_stats, 'wlm_ac_stats':ac_stats})
+		update_analysis_result(dict(ping_latency.items()+link_stats.items()+ac_stats.items()))
 
 	graph_list.append(html.Div(wlm_link_stats_graph('ping_latency', ['AP', 'gaming_server'], 'ms', None, 'scatter'), className = 'six columns'))
-	graph_list.append(html.Div(wlm_ping_cdf_graph(), className = 'six columns'))
+	graph_list.append(html.Div(wlm_ping_cdf_graph(), className = 'six columns'))	
 	return graph_list
 
 @app.callback(
