@@ -111,15 +111,18 @@ app.layout = html.Div(children=[
 	html.Hr(),
 	html.Div(children = [html.Label(' '),html.Div(id='wlm_high_latency_dashtable')], className='row'),
     #dcc.Graph(id='rssi-graph', animate=True),
-	dcc.Interval(id='wlm_stats_update', interval=2000),
+	dcc.Interval(id='wlm_stats_update', interval=3000),
 ], style={'backgroundColor':'#f0f0f5'})
 
 def wlm_ping_cdf_graph():
 	grap_data_list = []
-
+	max_axis = 0
+	for key in wlm_stats_ping_cdf_dict.keys():
+		max_axis = max(max(wlm_stats_ping_cdf_dict[key]), max_axis)
+	max_axis = int(max_axis) + 50
 	for key in wlm_stats_ping_cdf_dict.keys():
 		data = wlm_stats_ping_cdf_dict[key]
-		hist, bin_edges = np.histogram(data, bins = range(100))
+		hist, bin_edges = np.histogram(data, bins = range(max_axis))
 		#print hist
 		cdf = np.cumsum(hist)
 		grap_data = plotly.graph_objs.Scatter(
@@ -133,7 +136,7 @@ def wlm_ping_cdf_graph():
 		grap_data_list.append(grap_data)
 		#print cdf*100/len(data)
 	grap_layout = plotly.graph_objs.Layout(
-		xaxis=dict(range=[0,101]),
+		xaxis=dict(range=[0,max_axis]),
 		yaxis=dict(range=[0,101], title='%'),
 		title='ping_latency_cdf',
 		titlefont=dict(size=22),
