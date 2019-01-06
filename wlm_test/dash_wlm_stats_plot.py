@@ -22,14 +22,16 @@ total_ping_cnt = 0
 tolal_high_latency_cnt = 0
 current_test_state = 'start'
 id_ac_map = ['VO','VI','BE','BK']
-ping_addr_dict = {'gaming_server':'qualcomm.com', 'AP':'VI-HASTINGS-08'}
+ping_addr_dict = {'gaming_server':'192.168.1.1', 'AP':'192.168.1.1'}
 result_csv_file_name = "ping_test_result.csv"
 
 
 app = dash.Dash(__name__)
 #color_list = ['rgb(22, 96, 167)', 'rgb(205, 12, 24)']
 app.css.append_css({'external_url': 'https://cdn.rawgit.com/plotly/dash-app-stylesheets/2d266c578d2a6e8850ebce48fdb52759b2aef506/stylesheet-oil-and-gas.css'})  # noqa: E501
-wlan_dev = wlan_device('sim')
+#wlan_dev = wlan_device('sim')
+wlan_dev = wlan_device('7e2cc7ce')
+wlan_dev.prepare_wlm_stats()
 app.layout = html.Div(children=[
 	html.H1("WLAN ping latency dashboard", style={'textAlign': 'center','color': '#f2f2f2', 'backgroundColor':'#003366'}, className='row'),
 	html.Div(children = [
@@ -67,7 +69,7 @@ app.layout = html.Div(children=[
 					options=[
 						{'label': 'bcn_rssi', 'value': 'bcn_rssi'},
 						{'label': 'pwr_on_period', 'value': 'pwr_on_period'},
-						{'label': 'scan_on_period', 'value': 'scan_on_period'},
+						{'label': 'scan_period', 'value': 'scan_period'},
 						{'label': 'congestion_level', 'value': 'congestion_level'},
 					],
 					values=['bcn_rssi', 'congestion_level', 'pwr_on_period'],
@@ -81,7 +83,7 @@ app.layout = html.Div(children=[
 				dcc.Checklist(
 					id = 'ac_checkbox',
 					options=[
-						{'label': 'total_retries', 'value': 'total_retries'},
+						{'label': 'retries', 'value': 'retries'},
 						{'label': 'mpdu_lost', 'value': 'mpdu_lost'},
 						{'label': 'rx_ampdu', 'value': 'rx_ampdu'},
 						{'label': 'rx_mpdu', 'value': 'rx_mpdu'},
@@ -89,7 +91,7 @@ app.layout = html.Div(children=[
 						{'label': 'tx_ampdu', 'value': 'tx_ampdu'},
 						{'label': 'contention_time_avg', 'value': 'contention_time_avg'},
 					],
-					values=['total_retries', 'mpdu_lost', 'contention_time_avg'],
+					values=['retries', 'mpdu_lost', 'contention_time_avg'],
 					labelStyle={'display': 'inline-block'},
 				),
 			], className='row'),
@@ -139,8 +141,15 @@ def wlm_ping_cdf_graph():
 		xaxis=dict(range=[0,max_axis]),
 		yaxis=dict(range=[0,101], title='%'),
 		title='ping_latency_cdf',
-		titlefont=dict(size=22),
-		legend={'x': 10, 'y': 1}
+		titlefont=dict(size=12),
+		legend={'x': 0, 'y': 1},
+		height = 300,
+		margin = {
+		  "r": 20,
+		  "t": 30,
+		  "b": 30,
+		  "l": 50
+		},
 	)
 	graph = dcc.Graph(
 		id='ping_cdf',
@@ -186,8 +195,15 @@ def wlm_link_stats_graph(category, graph_name_list, xaxis_title, ext_name, mode)
 		xaxis=dict(range=[0,xaxis_max]),
 		yaxis=dict(range=[min_yaxis,max_yaxis], title=xaxis_title),
 		title=graph_title,
-		titlefont=dict(size=22),
-		legend={'x': 0, 'y': 1}
+		titlefont=dict(size=12),
+		legend={'x': 0, 'y': 1},
+		height = 300,
+		margin = {
+		  "r": 20,
+		  "t": 30,
+		  "b": 30,
+		  "l": 50
+		},
 	)
 	graph = dcc.Graph(
 		id=graph_title,
@@ -225,10 +241,17 @@ def wlm_ac_stats_graph(graph_name):
 		xaxis=dict(range=[0,xaxis_max]),
 		yaxis=dict(range=[min_yaxis,max_yaxis]),
 		title=graph_title,
-		titlefont=dict(size=22),
-		legend={'x': 0, 'y': 1},
 		paper_bgcolor="white",
         plot_bgcolor="white",
+		titlefont=dict(size=12),
+		legend={'x': 0, 'y': 1},
+		height = 300,
+		margin = {
+		  "r": 20,
+		  "t": 30,
+		  "b": 30,
+		  "l": 50
+		},
 	)
 	graph = dcc.Graph(
 		id=graph_title,
@@ -237,7 +260,7 @@ def wlm_ac_stats_graph(graph_name):
     )
 	return graph
 
-csv_columns = ['timestamp','gaming_server','AP','bcn_rssi', 'pwr_on_period', 'scan_on_period', 'congestion_level', 'total_retries', 'mpdu_lost', 'rx_ampdu', 'rx_mpdu', 'tx_mpdu', 'tx_ampdu', 'contention_time_avg']
+csv_columns = ['timestamp','gaming_server','AP','bcn_rssi', 'pwr_on_period', 'scan_period', 'congestion_level', 'retries', 'mpdu_lost', 'rx_ampdu', 'rx_mpdu', 'tx_mpdu', 'tx_ampdu', 'contention_time_avg']
 high_latency_columns = []
 def update_analysis_result(wlm_stats_result_dict):
 	#pass
@@ -377,8 +400,8 @@ def update_wlm_link_stats_graph(link_list):
 		graph_list.append(html.Div(wlm_link_stats_graph('wlm_link_stats', ['congestion_level'], '%', 'congestion_level', 'bar'), className = 'row'))
 	if 'pwr_on_period' in link_list:
 		graph_list.append(html.Div(wlm_link_stats_graph('wlm_link_stats', ['pwr_on_period'], '%', 'pwr_on_period', 'bar'), className = 'row'))
-	if 'scan_on_period' in link_list:
-		graph_list.append(html.Div(wlm_link_stats_graph('wlm_link_stats', ['scan_on_period'], '%', 'scan_on_period', 'bar'), className = 'row'))
+	if 'scan_period' in link_list:
+		graph_list.append(html.Div(wlm_link_stats_graph('wlm_link_stats', ['scan_period'], '%', 'scan_period', 'bar'), className = 'row'))
 	return graph_list
 
 @app.callback(

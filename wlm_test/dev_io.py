@@ -4,13 +4,13 @@ import time
 import datetime
 import random
 import serial 
+from offset_parser import wlm_offset_parser
 
 class wlan_device(object):
 	def __init__(self, device_port):
 		if device_port == 'sim':
 			self.device_port = device_port
 			self.__pwr_state = 'off'
-			self.__wlm_stats_req_time = time.time()
 			return None
 		out = os.popen('adb devices')
 		cmd_out = out.read()
@@ -25,6 +25,9 @@ class wlan_device(object):
 			return
 		self.device_port = device_port
 		self.__pwr_state = 'off'
+		self.__wlm_offset_map = None
+		self.__wlm_stats_req_time = time.time()
+		self.__wlam_last_ac_stats_dict = dict()
 
 	def get_rssi(self):
 		if self.device_port == 'sim':
@@ -86,22 +89,36 @@ class wlan_device(object):
 				#print latency_str
 				return int(latency_str[:latency_str.find('ms')])
 		else:
-			pass
+			out = os.popen('adb -s'  + self.device_port + ' shell ping -i 0.1 -c 10 -W 1 '+ ip_addr)
+			cmd_out = out.read()
+			#print cmd_out
+			cmd_out = cmd_out[cmd_out.find('mdev = ')+len('mdev = '):]
+			cmd_out = cmd_out[:cmd_out.find(' ms')]
+			print float(cmd_out.split('/')[1])
+			
+			return float(cmd_out.split('/')[1])
 	
-	def get_wlm_link_stats(self, cmd_str):
+	def get_wlm_link_stats(self, stats_value_list):
 		wlm_link_stats_dict = {}
 		if self.device_port == 'sim':
 			wlm_link_stats_dict['timestamp'] = "{0:.3f}".format(time.time() - self.__wlm_stats_req_time)
 			wlm_link_stats_dict['pwr_on_period'] =  random.randint(0, 100)
 			wlm_link_stats_dict['congestion_level'] =  random.randint(0, 50)
 			wlm_link_stats_dict['bcn_rssi'] =  random.randint(-96, 0)
-			wlm_link_stats_dict['scan_on_period'] =  random.randint(0, 50)
+			wlm_link_stats_dict['scan_period'] =  random.randint(0, 50)
 			#self.__last_wlm_stats_req_time = time.time()
 		else:
-			pass
+			wlm_link_stats_dict['timestamp'] = "{0:.3f}".format(time.time() - self.__wlm_stats_req_time)
+			wlm_link_stats_dict['pwr_on_period'] =  int(stats_value_list[self.__wlm_offset_map['pwr_on_period'][0]], 16)
+			wlm_link_stats_dict['congestion_level'] =  int(stats_value_list[self.__wlm_offset_map['congestion_level'][0]], 16)
+			tmp_str = stats_value_list[self.__wlm_offset_map['bcn_rssi'][0]]
+			tmp_str = tmp_str[len(tmp_str)-2:]
+			wlm_link_stats_dict['bcn_rssi'] =  int(tmp_str, 16) - 256
+			wlm_link_stats_dict['scan_period'] =  int(stats_value_list[self.__wlm_offset_map['scan_period'][0]], 16)
 		#print wlm_link_stats_dict
 		return wlm_link_stats_dict
-	def get_wlm_ac_stats(self, cmd_str):
+
+	def get_wlm_ac_stats(self, stats_value_list):
 		wlm_ac_stats_dict = {}
 		if self.device_port == 'sim':
 			wlm_ac_stats_dict['tx_mpdu'] = [random.randint(0, 20),random.randint(0, 40),random.randint(0, 60),random.randint(0, 20)]
@@ -113,12 +130,47 @@ class wlan_device(object):
 			wlm_ac_stats_dict['contention_time_avg'] = [random.randint(0, 100),random.randint(0, 100),random.randint(0, 100),random.randint(0, 100)]
 			#self.__last_wlm_stats_req_time = time.time()
 		else:
-			pass
+			def __calc_wlm_ac_stats(stats_value_list, ac_stats_name):
+				tmp_list = [int(stats_value_list[offset], 16) for offset in self.__wlm_offset_map[ac_stats_name]]
+				if not self.__wlam_last_ac_stats_dict.has_key(ac_stats_name):
+					self.__wlam_last_ac_stats_dict[ac_stats_name] = tmp_list
+					return tmp_list
+				else:
+					delta_list = [tmp_list[i] - self.__wlam_last_ac_stats_dict[ac_stats_name][i] for i in xrange(len(tmp_list))]
+					self.__wlam_last_ac_stats_dict[ac_stats_name] = tmp_list
+					return delta_list
+			wlm_ac_stats_dict['tx_mpdu'] = __calc_wlm_ac_stats(stats_value_list, 'tx_mpdu')
+			wlm_ac_stats_dict['rx_mpdu'] = __calc_wlm_ac_stats(stats_value_list, 'rx_mpdu')
+			wlm_ac_stats_dict['tx_ampdu'] = __calc_wlm_ac_stats(stats_value_list, 'tx_ampdu')
+			wlm_ac_stats_dict['rx_ampdu'] = __calc_wlm_ac_stats(stats_value_list, 'rx_ampdu')
+			wlm_ac_stats_dict['mpdu_lost'] = __calc_wlm_ac_stats(stats_value_list, 'mpdu_lost')
+			wlm_ac_stats_dict['retries'] = __calc_wlm_ac_stats(stats_value_list, 'retries')
+			wlm_ac_stats_dict['contention_time_avg'] = [int(stats_value_list[offset], 16) for offset in self.__wlm_offset_map['contention_time_avg']]
 		#print wlm_ac_stats_dict
 		return wlm_ac_stats_dict
 
 	def get_wlm_stats(self):
-		return self.get_wlm_link_stats(None), self.get_wlm_ac_stats(None)
+		if self.device_port == 'sim':
+			return self.get_wlm_link_stats(None), self.get_wlm_ac_stats(None)
+		else:
+			stats_value_list = []
+			out = os.popen('adb -s ' + self.device_port + ' shell iwpriv wlan0 get_wlm_stats 3')
+			cmd_out = out.read()
+			cmd_out = cmd_out[cmd_out.find('data')+6:].rstrip()
+			stats_value_list = cmd_out.split(' ')
+			#print stats_value_list
+		return self.get_wlm_link_stats(stats_value_list), self.get_wlm_ac_stats(stats_value_list)
+	def prepare_wlm_stats(self):
+		if self.device_port == 'sim':
+			pass
+		else:
+			if self.__wlm_offset_map == None:
+				self.__wlm_offset_map = wlm_offset_parser('wlm_stats_offset_map.csv')
+				out = os.popen('adb -s ' + self.device_port + ' shell iwpriv wlan0 get_wlm_stats 3')
+				cmd_out = out.read()
+				cmd_out = cmd_out[cmd_out.find('data')+6:].rstrip()
+				stats_value_list = cmd_out.split(' ')
+				self.get_wlm_ac_stats(stats_value_list)
 
 def get_wlan_device_list():
 	out = os.popen('adb devices')
@@ -161,13 +213,10 @@ class turn_table_device(object):
 		print "angle set cmd:%s val:%d angle_set_cnt:%d" % (cmd, val, self.__angle_set_cnt)
 
 if __name__ == '__main__':
-	wlan_dev = wlan_device('sim')
+	wlan_dev = wlan_device('7e2cc7ce')
+	wlan_dev.prepare_wlm_stats()
 	test_count = 10
 	while test_count > 0:
-		ap_latency = wlan_dev.get_ping_latency('192.168.1.1')
-		print "ap latency:{0}ms".format(ap_latency)
-		game_server_latency = wlan_dev.get_ping_latency('52.94.8.22')
-		print "ap game_server_latency:{0}ms".format(game_server_latency)
 		wlan_dev.get_wlm_stats()
 		time.sleep(3)
 		test_count -= 1
