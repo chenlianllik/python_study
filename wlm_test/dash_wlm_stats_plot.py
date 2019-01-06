@@ -9,7 +9,9 @@ import dev_io
 import csv
 import os
 import numpy as np
+import datetime
 
+start_date_time = datetime.datetime.now()
 wlm_stats_plot_list = []
 wlm_stats_cache_list = []
 wlm_stats_high_latency_list = []
@@ -22,13 +24,14 @@ total_ping_cnt = 0
 tolal_high_latency_cnt = 0
 current_test_state = 'start'
 id_ac_map = ['VO','VI','BE','BK']
-ping_addr_dict = {'gaming_server':'qualcomm.com', 'AP':'VI-HASTINGS-08'}
+ping_addr_dict = {'gaming_server':'49.51.196.180', 'AP':'192.168.1.1'}
 result_csv_file_name = "ping_test_result.csv"
 
 
 app = dash.Dash(__name__)
 #color_list = ['rgb(22, 96, 167)', 'rgb(205, 12, 24)']
 app.css.append_css({'external_url': 'https://cdn.rawgit.com/plotly/dash-app-stylesheets/2d266c578d2a6e8850ebce48fdb52759b2aef506/stylesheet-oil-and-gas.css'})  # noqa: E501
+
 wlan_dev = wlan_device('sim')
 app.layout = html.Div(children=[
 	html.H1("WLAN ping latency dashboard", style={'textAlign': 'center','color': '#f2f2f2', 'backgroundColor':'#003366'}, className='row'),
@@ -310,18 +313,17 @@ def restart_test():
 
 @app.callback(Output('ping_output', 'children'),
               [Input('gaming_server_input', 'n_submit'), Input('gaming_server_input', 'n_blur'),
-               Input('AP_input', 'n_submit'), Input('AP_input', 'n_blur')],
+               Input('AP_input', 'n_submit'), Input('AP_input', 'n_blur'), Input('wlm_stats_update', 'n_intervals')],
               [State('gaming_server_input', 'value'),
-               State('AP_input', 'value')],
-			   events=[Event('wlm_stats_update', 'interval')]
+               State('AP_input', 'value')]
 			  )
-def update_ping_addr_output(ns1, nb1, ns2, nb2, input1, input2):
+def update_ping_addr_output(ns1, nb1, ns2, nb2,n, input1, input2):
 	ping_addr_dict['gaming_server'] = input1
 	ping_addr_dict['AP'] = input2
 	return '''
-		gaming_server address is "{}",
-		and AP address is "{}"
-	'''.format( ping_addr_dict['gaming_server'], ping_addr_dict['AP'])
+		gaming_server address: {},
+		and AP address: {}, current time: {}
+	'''.format( ping_addr_dict['gaming_server'], ping_addr_dict['AP'], datetime.datetime.now())
 
 @app.callback(Output('test_state_output', 'children'),
               [Input('start_button', 'n_clicks_timestamp'),
@@ -329,23 +331,41 @@ def update_ping_addr_output(ns1, nb1, ns2, nb2, input1, input2):
                Input('restart_button', 'n_clicks_timestamp')])
 def displayClick(btn1, btn2, btn3):
 	global current_test_state
+	global start_date_time
 	if int(btn1) > int(btn2) and int(btn1) > int(btn3):
-		current_test_state = 'start'
+		if current_test_state != 'start':
+			current_test_state = 'start'
+			start_date_time = datetime.datetime.now()
 	elif int(btn2) > int(btn1) and int(btn2) > int(btn3):
 		current_test_state = 'stop'
 	elif int(btn3) > int(btn1) and int(btn3) > int(btn2):
 		restart_test()
+		start_date_time = datetime.datetime.now()
 		current_test_state = 'start'
 	print current_test_state
+	
 	return '''
-		current test state "{}"
-	'''.format(current_test_state)
+		current test state "{}", start time: {}
+	'''.format(current_test_state, start_date_time, )
+
+@app.callback(Output('wlm_stats_update', 'interval'),
+              [Input('start_button', 'n_clicks_timestamp'),
+               Input('stop_button', 'n_clicks_timestamp'),
+               Input('restart_button', 'n_clicks_timestamp')])
+def buttonClick(btn1, btn2, btn3):
+	if int(btn1) > int(btn2) and int(btn1) > int(btn3):
+		return 3000
+	elif int(btn2) > int(btn1) and int(btn2) > int(btn3):
+		return 300000
+	elif int(btn3) > int(btn1) and int(btn3) > int(btn2):
+		return 3000
+	return 3000
 
 @app.callback(
 	Output('wlm_ping_stats_graphs', 'children'),
-	events=[Event('wlm_stats_update', 'interval')]
+	[Input('wlm_stats_update', 'n_intervals')]
 	)
-def update_wlm_ping_stats_graph():
+def update_wlm_ping_stats_graph(n):
 	graph_list = []
 	global current_test_state
 	if len(wlm_stats_plot_list) == 0:
@@ -363,13 +383,13 @@ def update_wlm_ping_stats_graph():
 
 @app.callback(
 	Output('wlm_link_stats_graphs', 'children'),
-	[Input('link_checkbox', 'values')],
-	events=[Event('wlm_stats_update', 'interval')]
+	[Input('link_checkbox', 'values'),
+	 Input('wlm_stats_update', 'n_intervals')]
 	)
-def update_wlm_link_stats_graph(link_list):
+def update_wlm_link_stats_graph(link_list, n):
 	graph_list = []
 	#print wlm_stats_cache_list
-	if len(wlm_stats_plot_list) > 60:
+	if len(wlm_stats_plot_list) > 100:
 		wlm_stats_plot_list.pop(0)
 	if 'bcn_rssi' in link_list:
 		graph_list.append(html.Div(wlm_link_stats_graph('wlm_link_stats', ['bcn_rssi'], 'dbm', 'bcn_rssi', 'scatter'), className = 'row'))
@@ -383,10 +403,10 @@ def update_wlm_link_stats_graph(link_list):
 
 @app.callback(
 	Output('wlm_ac_stats_graphs', 'children'),
-	[Input('ac_checkbox', 'values')],
-	events=[Event('wlm_stats_update', 'interval')]
+	[Input('ac_checkbox', 'values'),
+	 Input('wlm_stats_update', 'n_intervals')]
 	)
-def update_wlm_ac_stats_graph(ac_list):
+def update_wlm_ac_stats_graph(ac_list, n):
 	graph_list = []
 	for ac_name in ac_list:
 		graph_list.append(html.Div(wlm_ac_stats_graph(ac_name), className = 'row'))
@@ -394,10 +414,10 @@ def update_wlm_ac_stats_graph(ac_list):
 
 @app.callback(
 	Output('high_latency_threshold_output', 'children'),
-	[Input('high_latency_threshold_slider', 'value')],
-	events=[Event('wlm_stats_update', 'interval')]
+	[Input('high_latency_threshold_slider', 'value'),
+	 Input('wlm_stats_update', 'n_intervals')]
 	)
-def update_high_latency_output(threshold):
+def update_high_latency_output(threshold, n):
 	global high_latency_threshold
 	global tolal_high_latency_cnt
 	global total_ping_cnt
@@ -413,9 +433,9 @@ def update_high_latency_output(threshold):
 		'''.format(high_latency_threshold, high_latency_percent)
 @app.callback(
 	Output('wlm_high_latency_dashtable', 'children'),
-	events=[Event('wlm_stats_update', 'interval')]
+	[Input('wlm_stats_update', 'n_intervals')]
 	)
-def update_high_latency_dashtable():
+def update_high_latency_dashtable(n):
 	#print high_latency_columns
 	if len(wlm_stats_high_latency_list) != 0:
 		#print tmp_col
@@ -425,8 +445,6 @@ def update_high_latency_dashtable():
 			columns=high_latency_columns,
 			data=wlm_stats_high_latency_list,
 			merge_duplicate_headers=True,
-			sorting=True,
-			sorting_type="multi",
 			style_table={
 				'maxHeight': '400',
 				'overflowY': 'scroll',
