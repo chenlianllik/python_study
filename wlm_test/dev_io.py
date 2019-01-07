@@ -91,7 +91,9 @@ class wlan_device(object):
 		else:
 			out = os.popen('adb -s'  + self.device_port + ' shell ping -i 0.1 -c 10 -W 1 '+ ip_addr)
 			cmd_out = out.read()
-			#print cmd_out
+			print cmd_out
+			if '100% packet loss' in cmd_out:
+				return float(1000)
 			cmd_out = cmd_out[cmd_out.find('mdev = ')+len('mdev = '):]
 			cmd_out = cmd_out[:cmd_out.find(' ms')]
 			print float(cmd_out.split('/')[1])
@@ -106,6 +108,8 @@ class wlan_device(object):
 			wlm_link_stats_dict['congestion_level'] =  random.randint(0, 50)
 			wlm_link_stats_dict['bcn_rssi'] =  random.randint(-96, 0)
 			wlm_link_stats_dict['scan_period'] =  random.randint(0, 50)
+			wlm_link_stats_dict['phy_err'] =  random.randint(0, 100)
+			wlm_link_stats_dict['mpdu_err'] =  random.randint(0, 100)
 			#self.__last_wlm_stats_req_time = time.time()
 		else:
 			wlm_link_stats_dict['timestamp'] = "{0:.3f}".format(time.time() - self.__wlm_stats_req_time)
@@ -115,6 +119,8 @@ class wlan_device(object):
 			tmp_str = tmp_str[len(tmp_str)-2:]
 			wlm_link_stats_dict['bcn_rssi'] =  int(tmp_str, 16) - 256
 			wlm_link_stats_dict['scan_period'] =  int(stats_value_list[self.__wlm_offset_map['scan_period'][0]], 16)
+			wlm_link_stats_dict['phy_err'] =  int(stats_value_list[self.__wlm_offset_map['phy_err'][0]], 16)
+			wlm_link_stats_dict['mpdu_err'] =  int(stats_value_list[self.__wlm_offset_map['mpdu_err'][0]], 16)
 		#print wlm_link_stats_dict
 		return wlm_link_stats_dict
 

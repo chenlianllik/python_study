@@ -10,6 +10,7 @@ import csv
 import os
 import numpy as np
 import datetime
+import sys
 
 start_date_time = datetime.datetime.now()
 wlm_stats_plot_list = []
@@ -32,8 +33,9 @@ app = dash.Dash(__name__)
 #color_list = ['rgb(22, 96, 167)', 'rgb(205, 12, 24)']
 app.css.append_css({'external_url': 'https://cdn.rawgit.com/plotly/dash-app-stylesheets/2d266c578d2a6e8850ebce48fdb52759b2aef506/stylesheet-oil-and-gas.css'})  # noqa: E501
 #wlan_dev = wlan_device('sim')
-wlan_dev = wlan_device('7e2cc7ce')
-wlan_dev.prepare_wlm_stats()
+#wlan_dev = wlan_device('7e2cc7ce')
+#wlan_dev.prepare_wlm_stats()
+wlan_dev = None
 app.layout = html.Div(children=[
 	html.H1("WLAN ping latency dashboard", style={'textAlign': 'center','color': '#f2f2f2', 'backgroundColor':'#003366'}, className='row'),
 	html.Div(children = [
@@ -73,6 +75,8 @@ app.layout = html.Div(children=[
 						{'label': 'pwr_on_period', 'value': 'pwr_on_period'},
 						{'label': 'scan_period', 'value': 'scan_period'},
 						{'label': 'congestion_level', 'value': 'congestion_level'},
+						{'label': 'phy_err', 'value': 'phy_err'},
+						{'label': 'mpdu_err', 'value': 'mpdu_err'},
 					],
 					values=['bcn_rssi', 'congestion_level', 'pwr_on_period'],
 					labelStyle={'display': 'inline-block'},
@@ -116,6 +120,7 @@ app.layout = html.Div(children=[
 	html.Div(children = [html.Label(' '),html.Div(id='wlm_high_latency_dashtable')], className='row'),
     #dcc.Graph(id='rssi-graph', animate=True),
 	dcc.Interval(id='wlm_stats_update', interval=3000),
+	dcc.Interval(id='wlan_link_info_update', interval=10000),
 ], style={'backgroundColor':'#f0f0f5'})
 
 def wlm_ping_cdf_graph():
@@ -262,7 +267,7 @@ def wlm_ac_stats_graph(graph_name):
     )
 	return graph
 
-csv_columns = ['timestamp','gaming_server','AP','bcn_rssi', 'pwr_on_period', 'scan_period', 'congestion_level', 'retries', 'mpdu_lost', 'rx_ampdu', 'rx_mpdu', 'tx_mpdu', 'tx_ampdu', 'contention_time_avg']
+csv_columns = ['timestamp','gaming_server','AP','bcn_rssi', 'pwr_on_period', 'scan_period', 'congestion_level', 'phy_err','mpdu_err', 'retries', 'mpdu_lost', 'rx_ampdu', 'rx_mpdu', 'tx_mpdu', 'tx_ampdu', 'contention_time_avg']
 high_latency_columns = []
 def update_analysis_result(wlm_stats_result_dict):
 	#pass
@@ -335,17 +340,28 @@ def restart_test():
 
 @app.callback(Output('ping_output', 'children'),
               [Input('gaming_server_input', 'n_submit'), Input('gaming_server_input', 'n_blur'),
-               Input('AP_input', 'n_submit'), Input('AP_input', 'n_blur'), Input('wlm_stats_update', 'n_intervals')],
+               Input('AP_input', 'n_submit'), Input('AP_input', 'n_blur'), Input('wlan_link_info_update', 'n_intervals')],
               [State('gaming_server_input', 'value'),
                State('AP_input', 'value')]
 			  )
 def update_ping_addr_output(ns1, nb1, ns2, nb2,n, input1, input2):
 	ping_addr_dict['gaming_server'] = input1
 	ping_addr_dict['AP'] = input2
-	return '''
-		gaming_server address: {},
-		and AP address: {}, current time: {}
-	'''.format( ping_addr_dict['gaming_server'], ping_addr_dict['AP'], datetime.datetime.now())
+	print "update_ping_output"
+	if wlan_dev.device_port == 'sim':	
+		return '''
+			[gaming_server address: {} 
+			and AP address: {}] [connection: simulator] [current time: {}]
+		'''.format( ping_addr_dict['gaming_server'], ping_addr_dict['AP'], datetime.datetime.now())
+	else:
+		tmp_link_info_dict = wlan_dev.get_link_info()
+		link_info_str = 'adb_dev:' + wlan_dev.device_port + '  '
+		for key in tmp_link_info_dict:
+			link_info_str = link_info_str + key + ':' + tmp_link_info_dict[key] + '  '
+		return '''
+			[gaming_server address: {}
+			and AP address: {}] [connection: {}] [current time: {}]
+		'''.format( ping_addr_dict['gaming_server'], ping_addr_dict['AP'], link_info_str, datetime.datetime.now())
 
 @app.callback(Output('test_state_output', 'children'),
               [Input('start_button', 'n_clicks_timestamp'),
@@ -421,6 +437,10 @@ def update_wlm_link_stats_graph(link_list, n):
 		graph_list.append(html.Div(wlm_link_stats_graph('wlm_link_stats', ['pwr_on_period'], '%', 'pwr_on_period', 'bar'), className = 'row'))
 	if 'scan_period' in link_list:
 		graph_list.append(html.Div(wlm_link_stats_graph('wlm_link_stats', ['scan_period'], '%', 'scan_period', 'bar'), className = 'row'))
+	if 'phy_err' in link_list:
+		graph_list.append(html.Div(wlm_link_stats_graph('wlm_link_stats', ['phy_err'], '', 'phy_err', 'bar'), className = 'row'))
+	if 'mpdu_err' in link_list:
+		graph_list.append(html.Div(wlm_link_stats_graph('wlm_link_stats', ['mpdu_err'], '', 'mpdu_err', 'bar'), className = 'row'))
 	return graph_list
 
 @app.callback(
@@ -491,5 +511,8 @@ def update_high_latency_dashtable(n):
 		)
 
 if __name__ == '__main__':
-	#pass
-    app.run_server(debug=False,port=8050,host='0.0.0.0')
+	wlan_dev = wlan_device(sys.argv[1])
+	if wlan_dev.device_port == None:
+		wlan_dev = wlan_device('sim')
+	wlan_dev.prepare_wlm_stats()
+	app.run_server(debug=False,port=int(sys.argv[2]),host='0.0.0.0')
