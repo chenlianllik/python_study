@@ -25,9 +25,15 @@ total_ping_cnt = 0
 tolal_high_latency_cnt = 0
 current_test_state = 'start'
 id_ac_map = ['VO','VI','BE','BK']
-ping_addr_dict = {'gaming_server':'192.168.1.1', 'AP':'192.168.1.1'}
+ping_addr_dict = {'gaming_server':['', 5], 'AP':['192.168.1.1', 10]}
 result_csv_file_name = "ping_test_result.csv"
 
+wlm_latency_mode_dict = {
+	'ultra-low':'ITO:200, Scan:Suppress, Roam:Suppress',
+	'low':'ITO:100, Scan:20ms, Roam:Allow',
+	'moderate':'ITO:50, Scan:40ms, Roam:Allow',
+	'normal':'ITO:50, Scan:Default, Roam:Allow',
+}
 
 app = dash.Dash(__name__)
 #color_list = ['rgb(22, 96, 167)', 'rgb(205, 12, 24)']
@@ -45,18 +51,31 @@ app.layout = html.Div(children=[
 				html.Div(children = [
 					html.Label('gaming server IP address:', className = 'two columns'),
 					html.Label('local AP IP address:', className = 'two columns'),
-					html.Div(id='test_state_output', className = 'six columns'),
+					html.Div(id='test_state_output', className = 'four columns'),
+					html.Div(id='latency_mode_output',className='four columns'),
 				],className = 'row'),
 				html.Div(children = [
 					html.Div(children = [
-						dcc.Input(id='gaming_server_input', type='text', value=ping_addr_dict['gaming_server']),
+						dcc.Input(id='gaming_server_input', type='text', value=ping_addr_dict['gaming_server'][0]),
 					],className='two columns'),	
 					html.Div(children = [
-						dcc.Input(id='AP_input', type='text', value=ping_addr_dict['AP']),
-					],className='two columns'),	
-					html.Button('start', id='start_button', n_clicks_timestamp='0', className = 'one column'),
-					html.Button('stop', id='stop_button', n_clicks_timestamp='0',className = 'one column'),
-					html.Button('restart', id='restart_button', n_clicks_timestamp='0',className = 'one column'),
+						dcc.Input(id='AP_input', type='text', value=ping_addr_dict['AP'][0]),
+					],className='two columns'),
+					html.Div(children = [					
+						html.Button('start', id='start_button', n_clicks_timestamp='0'),
+						html.Button('stop', id='stop_button', n_clicks_timestamp='0'),
+						html.Button('restart', id='restart_button', n_clicks_timestamp='0'),
+					],className='four columns'),	
+					html.Div(children = [
+						dcc.RadioItems(
+							id = 'latency_mode_radio',
+							options=[
+								{'label':mode,'value':mode} for mode in wlm_latency_mode_dict.keys()
+							],
+							value='normal',
+							labelStyle={'display': 'inline-block'}
+						)
+					], className='four columns'),
 				],className = 'row'),
 			], className = 'row'),
 			html.Div(id='ping_output',className='row'),
@@ -65,6 +84,7 @@ app.layout = html.Div(children=[
 	],className = 'row'),
 	html.Hr(),
 	html.H4(children='wlm stats', className = 'row'),
+
 	html.Div(children = [
 		html.Div(children = [
 			html.Div(children = [
@@ -345,14 +365,14 @@ def restart_test():
                State('AP_input', 'value')]
 			  )
 def update_ping_addr_output(ns1, nb1, ns2, nb2,n, input1, input2):
-	ping_addr_dict['gaming_server'] = input1
-	ping_addr_dict['AP'] = input2
+	ping_addr_dict['gaming_server'][0] = input1
+	ping_addr_dict['AP'][0] = input2
 	print "update_ping_output"
 	if wlan_dev.device_port == 'sim':	
 		return '''
 			[gaming_server address: {} 
 			and AP address: {}] [connection: simulator] [current time: {}]
-		'''.format( ping_addr_dict['gaming_server'], ping_addr_dict['AP'], datetime.datetime.now())
+		'''.format( ping_addr_dict['gaming_server'][0], ping_addr_dict['AP'][0], datetime.datetime.now())
 	else:
 		tmp_link_info_dict = wlan_dev.get_link_info()
 		link_info_str = 'adb_dev:' + wlan_dev.device_port + '  '
@@ -361,7 +381,7 @@ def update_ping_addr_output(ns1, nb1, ns2, nb2,n, input1, input2):
 		return '''
 			[gaming_server address: {}
 			and AP address: {}] [connection: {}] [current time: {}]
-		'''.format( ping_addr_dict['gaming_server'], ping_addr_dict['AP'], link_info_str, datetime.datetime.now())
+		'''.format( ping_addr_dict['gaming_server'][0], ping_addr_dict['AP'][0], link_info_str, datetime.datetime.now())
 
 @app.callback(Output('test_state_output', 'children'),
               [Input('start_button', 'n_clicks_timestamp'),
@@ -410,7 +430,7 @@ def update_wlm_ping_stats_graph(n):
 		if os.path.exists(result_csv_file_name):
 			os.remove(result_csv_file_name)
 	if current_test_state == 'start':
-		ping_latency = dict((ip_addr, wlan_dev.get_ping_latency(ping_addr_dict[ip_addr])) for ip_addr in ping_addr_dict.keys())
+		ping_latency = dict((ip_addr, wlan_dev.get_ping_latency(ping_addr_dict[ip_addr][0], ping_addr_dict[ip_addr][1])) for ip_addr in ping_addr_dict.keys())
 		link_stats, ac_stats = wlan_dev.get_wlm_stats()
 		wlm_stats_plot_list.append({'ping_latency':ping_latency, 'wlm_link_stats':link_stats, 'wlm_ac_stats':ac_stats})
 		update_analysis_result(dict(ping_latency.items()+link_stats.items()+ac_stats.items()))
@@ -420,6 +440,18 @@ def update_wlm_ping_stats_graph(n):
 	return graph_list
 
 @app.callback(
+	Output('latency_mode_output', 'children'),
+	[Input('latency_mode_radio', 'value')]
+	)
+def update_wlm_latency_mode(mode):
+	if wlan_dev.device_port == 'sim':
+		return 'no latency mode can be set in simulator mode'
+	wlan_dev.set_wlm_latency_mode(mode)
+	return '''
+		current latency mode: "{}", settings: {}
+	'''.format(mode, wlm_latency_mode_dict[mode])
+
+@app.callback(
 	Output('wlm_link_stats_graphs', 'children'),
 	[Input('link_checkbox', 'values'),
 	 Input('wlm_stats_update', 'n_intervals')]
@@ -427,7 +459,7 @@ def update_wlm_ping_stats_graph(n):
 def update_wlm_link_stats_graph(link_list, n):
 	graph_list = []
 	#print wlm_stats_cache_list
-	if len(wlm_stats_plot_list) > 100:
+	if len(wlm_stats_plot_list) > 150:
 		wlm_stats_plot_list.pop(0)
 	if 'bcn_rssi' in link_list:
 		graph_list.append(html.Div(wlm_link_stats_graph('wlm_link_stats', ['bcn_rssi'], 'dbm', 'bcn_rssi', 'scatter'), className = 'row'))
@@ -514,5 +546,7 @@ if __name__ == '__main__':
 	wlan_dev = wlan_device(sys.argv[1])
 	if wlan_dev.device_port == None:
 		wlan_dev = wlan_device('sim')
+	result_csv_file_name = result_csv_file_name+'_'+wlan_dev.device_port
 	wlan_dev.prepare_wlm_stats()
+	wlan_dev.set_wlm_latency_mode('normal')
 	app.run_server(debug=False,port=int(sys.argv[2]),host='0.0.0.0')

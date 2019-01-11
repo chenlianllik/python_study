@@ -75,7 +75,7 @@ class wlan_device(object):
 					link_info_dict[tmp_list[0]] = tmp_list[1]
 		return link_info_dict
 	
-	def get_ping_latency(self, ip_addr):
+	def get_ping_latency(self, ip_addr, count):
 		if self.device_port == 'sim':
 			out = os.popen('ping -n 1 -w 2 '+ ip_addr)
 			cmd_out = out.read()
@@ -89,7 +89,10 @@ class wlan_device(object):
 				#print latency_str
 				return int(latency_str[:latency_str.find('ms')])
 		else:
-			out = os.popen('adb -s'  + self.device_port + ' shell ping -i 0.1 -c 10 -W 1 '+ ip_addr)
+			if ip_addr == '':
+				return float(-1)
+			ping_cmd = 'adb -s {} shell ping -i 0.08 -c {} -W 1 {}'.format(self.device_port, count, ip_addr)
+			out = os.popen(ping_cmd)
 			cmd_out = out.read()
 			print cmd_out
 			if '100% packet loss' in cmd_out:
@@ -177,6 +180,20 @@ class wlan_device(object):
 				cmd_out = cmd_out[cmd_out.find('data')+6:].rstrip()
 				stats_value_list = cmd_out.split(' ')
 				self.get_wlm_ac_stats(stats_value_list)
+	def set_wlm_latency_mode(self, mode):
+		if self.device_port == 'sim':
+			pass
+		else:
+			if mode == 'ultra-low':
+				os.popen('adb -s ' + self.device_port + ' shell iwpriv wlan0 setUnitTestCmd 0x2f 5 0 3 20 20 0xc83')
+			elif mode == 'Moderate':
+				os.popen('adb -s ' + self.device_port + ' shell iwpriv wlan0 setUnitTestCmd 0x2f 5 0 1 60 60 0x8')
+			elif mode == 'low':
+				os.popen('adb -s ' + self.device_port + ' shell iwpriv wlan0 setUnitTestCmd 0x2f 5 0 2 40 40 0x8a')
+			elif mode == 'normal':
+				os.popen('adb -s ' + self.device_port + ' shell iwpriv wlan0 setUnitTestCmd 0x2f 5 0 0 0 0 0x0 ')
+			else:
+				print "do not support this mode:{}".format(mode) 
 
 def get_wlan_device_list():
 	out = os.popen('adb devices')
