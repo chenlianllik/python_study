@@ -11,6 +11,7 @@ import os
 import numpy as np
 import datetime
 import sys
+from flask import request
 
 start_date_time = datetime.datetime.now()
 wlm_stats_plot_list = []
@@ -34,8 +35,10 @@ wlm_latency_mode_dict = {
 	'moderate':'ITO:50, Scan:40ms, Roam:Allow',
 	'normal':'ITO:50, Scan:Default, Roam:Allow',
 }
+current_latency_mode = 'normal'
 
 app = dash.Dash(__name__)
+
 #color_list = ['rgb(22, 96, 167)', 'rgb(205, 12, 24)']
 app.css.append_css({'external_url': 'https://cdn.rawgit.com/plotly/dash-app-stylesheets/2d266c578d2a6e8850ebce48fdb52759b2aef506/stylesheet-oil-and-gas.css'})  # noqa: E501
 #wlan_dev = wlan_device('sim')
@@ -365,9 +368,9 @@ def restart_test():
                State('AP_input', 'value')]
 			  )
 def update_ping_addr_output(ns1, nb1, ns2, nb2,n, input1, input2):
-	ping_addr_dict['gaming_server'][0] = input1
-	ping_addr_dict['AP'][0] = input2
-	print "update_ping_output"
+	if is_addmin_access():
+		ping_addr_dict['gaming_server'][0] = input1
+		ping_addr_dict['AP'][0] = input2
 	if wlan_dev.device_port == 'sim':	
 		return '''
 			[gaming_server address: {} 
@@ -378,10 +381,16 @@ def update_ping_addr_output(ns1, nb1, ns2, nb2,n, input1, input2):
 		link_info_str = 'adb_dev:' + wlan_dev.device_port + '  '
 		for key in tmp_link_info_dict:
 			link_info_str = link_info_str + key + ':' + tmp_link_info_dict[key] + '  '
-		return '''
-			[gaming_server address: {}
-			and AP address: {}] [connection: {}] [current time: {}]
-		'''.format( ping_addr_dict['gaming_server'][0], ping_addr_dict['AP'][0], link_info_str, datetime.datetime.now())
+		if is_addmin_access():
+			return '''
+				[gaming_server address: {}
+				and AP address: {}] [connection: {}] [current time: {}] [access: admin]
+			'''.format( ping_addr_dict['gaming_server'][0], ping_addr_dict['AP'][0], link_info_str, datetime.datetime.now())
+		else:
+			return '''
+				[gaming_server address: {}
+				and AP address: {}] [connection: {}] [current time: {}] [access: guest]
+			'''.format( ping_addr_dict['gaming_server'][0], ping_addr_dict['AP'][0], link_info_str, datetime.datetime.now())			
 
 @app.callback(Output('test_state_output', 'children'),
               [Input('start_button', 'n_clicks_timestamp'),
@@ -390,17 +399,18 @@ def update_ping_addr_output(ns1, nb1, ns2, nb2,n, input1, input2):
 def displayClick(btn1, btn2, btn3):
 	global current_test_state
 	global start_date_time
-	if int(btn1) > int(btn2) and int(btn1) > int(btn3):
-		if current_test_state != 'start':
-			current_test_state = 'start'
+	if is_addmin_access():
+		if int(btn1) > int(btn2) and int(btn1) > int(btn3):
+			if current_test_state != 'start':
+				current_test_state = 'start'
+				start_date_time = datetime.datetime.now()
+		elif int(btn2) > int(btn1) and int(btn2) > int(btn3):
+			current_test_state = 'stop'
+		elif int(btn3) > int(btn1) and int(btn3) > int(btn2):
+			restart_test()
 			start_date_time = datetime.datetime.now()
-	elif int(btn2) > int(btn1) and int(btn2) > int(btn3):
-		current_test_state = 'stop'
-	elif int(btn3) > int(btn1) and int(btn3) > int(btn2):
-		restart_test()
-		start_date_time = datetime.datetime.now()
-		current_test_state = 'start'
-	print current_test_state
+			current_test_state = 'start'
+		print current_test_state
 	
 	return '''
 		current test state "{}", start time: {}
@@ -426,10 +436,11 @@ def buttonClick(btn1, btn2, btn3):
 def update_wlm_ping_stats_graph(n):
 	graph_list = []
 	global current_test_state
+	
 	if len(wlm_stats_plot_list) == 0:
 		if os.path.exists(result_csv_file_name):
 			os.remove(result_csv_file_name)
-	if current_test_state == 'start':
+	if current_test_state == 'start' and is_addmin_access():
 		ping_latency = dict((ip_addr, wlan_dev.get_ping_latency(ping_addr_dict[ip_addr][0], ping_addr_dict[ip_addr][1])) for ip_addr in ping_addr_dict.keys())
 		link_stats, ac_stats = wlan_dev.get_wlm_stats()
 		wlm_stats_plot_list.append({'ping_latency':ping_latency, 'wlm_link_stats':link_stats, 'wlm_ac_stats':ac_stats})
@@ -441,15 +452,19 @@ def update_wlm_ping_stats_graph(n):
 
 @app.callback(
 	Output('latency_mode_output', 'children'),
-	[Input('latency_mode_radio', 'value')]
+	[Input('latency_mode_radio', 'value'),
+	Input('wlan_link_info_update', 'n_intervals')]
 	)
-def update_wlm_latency_mode(mode):
+def update_wlm_latency_mode(mode, n):
+	global current_latency_mode
 	if wlan_dev.device_port == 'sim':
 		return 'no latency mode can be set in simulator mode'
-	wlan_dev.set_wlm_latency_mode(mode)
+	if current_latency_mode != mode and is_addmin_access():
+		wlan_dev.set_wlm_latency_mode(mode)
+		current_latency_mode = mode
 	return '''
 		current latency mode: "{}", settings: {}
-	'''.format(mode, wlm_latency_mode_dict[mode])
+	'''.format(current_latency_mode, wlm_latency_mode_dict[current_latency_mode])
 
 @app.callback(
 	Output('wlm_link_stats_graphs', 'children'),
@@ -495,7 +510,7 @@ def update_high_latency_output(threshold, n):
 	global high_latency_threshold
 	global tolal_high_latency_cnt
 	global total_ping_cnt
-	if threshold*30 != high_latency_threshold:
+	if threshold*30 != high_latency_threshold and is_addmin_access():
 		high_latency_threshold = threshold*30
 	if total_ping_cnt == 0:
 		high_latency_percent = 0
@@ -542,6 +557,23 @@ def update_high_latency_dashtable(n):
 			}
 		)
 
+def is_addmin_access():
+	if request.remote_addr == admin_ip:
+		return True
+	else:
+		return False
+
+def check_admin_ip_alive(ip_addr):
+	out = os.popen('ping -n 3 -w 1 '+ ip_addr)
+	cmd_out = out.read()
+	print "checking admin IP is alive"
+	if "100% loss" in cmd_out:
+		print "admin IP:{} is not accessible, please check network".format(ip_addr)
+		return False
+	else:
+		print "admin IP:{} is alive".format(ip_addr)
+		return True
+
 if __name__ == '__main__':
 	wlan_dev = wlan_device(sys.argv[1])
 	if wlan_dev.device_port == None:
@@ -549,4 +581,7 @@ if __name__ == '__main__':
 	result_csv_file_name = result_csv_file_name+'_'+wlan_dev.device_port
 	wlan_dev.prepare_wlm_stats()
 	wlan_dev.set_wlm_latency_mode('normal')
-	app.run_server(debug=False,port=int(sys.argv[2]),host='0.0.0.0')
+	admin_ip = sys.argv[3]
+	if check_admin_ip_alive(admin_ip):
+		app.run_server(debug=False,port=int(sys.argv[2]),host='0.0.0.0')
+
