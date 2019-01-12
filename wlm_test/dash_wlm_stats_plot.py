@@ -27,7 +27,6 @@ tolal_high_latency_cnt = 0
 current_test_state = 'start'
 id_ac_map = ['VO','VI','BE','BK']
 ping_addr_dict = {'gaming_server':['', 5], 'AP':['192.168.1.1', 10]}
-result_csv_file_name = "ping_test_result.csv"
 
 wlm_latency_mode_dict = {
 	'ultra-low':'ITO:200, Scan:Suppress, Roam:Suppress',
@@ -578,7 +577,7 @@ if __name__ == '__main__':
 	wlan_dev = wlan_device(sys.argv[1])
 	if wlan_dev.device_port == None:
 		wlan_dev = wlan_device('sim')
-	result_csv_file_name = result_csv_file_name+'_'+wlan_dev.device_port
+	result_csv_file_name = 'ping_test_result_'+wlan_dev.device_port+'.csv'
 	wlan_dev.prepare_wlm_stats()
 	wlan_dev.set_wlm_latency_mode('normal')
 	admin_ip = sys.argv[3]
