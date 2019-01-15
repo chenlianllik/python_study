@@ -116,6 +116,7 @@ class wlan_device(object):
 			wlm_link_stats_dict['scan_period'] =  random.randint(0, 50)
 			wlm_link_stats_dict['phy_err'] =  random.randint(0, 100)
 			wlm_link_stats_dict['mpdu_err'] =  random.randint(0, 100)
+			wlm_link_stats_dict['last_tx_rate'] =  random.randint(0, 100)
 			#self.__last_wlm_stats_req_time = time.time()
 		else:
 			wlm_link_stats_dict['timestamp'] = "{0:.3f}".format(time.time() - self.__wlm_stats_req_time)
@@ -127,6 +128,7 @@ class wlan_device(object):
 			wlm_link_stats_dict['scan_period'] =  int(stats_value_list[self.__wlm_offset_map['scan_period'][0]], 16)
 			wlm_link_stats_dict['phy_err'] =  int(stats_value_list[self.__wlm_offset_map['phy_err'][0]], 16)
 			wlm_link_stats_dict['mpdu_err'] =  int(stats_value_list[self.__wlm_offset_map['mpdu_err'][0]], 16)
+			wlm_link_stats_dict['last_tx_rate'] =  int(stats_value_list[self.__wlm_offset_map['last_tx_rate'][0]], 16)
 		#print wlm_link_stats_dict
 		return wlm_link_stats_dict
 

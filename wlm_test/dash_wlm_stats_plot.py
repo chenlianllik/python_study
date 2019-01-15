@@ -99,6 +99,7 @@ app.layout = html.Div(children=[
 						{'label': 'congestion_level', 'value': 'congestion_level'},
 						{'label': 'phy_err', 'value': 'phy_err'},
 						{'label': 'mpdu_err', 'value': 'mpdu_err'},
+						{'label': 'last_tx_rate', 'value': 'last_tx_rate'},
 					],
 					values=['bcn_rssi', 'congestion_level', 'pwr_on_period'],
 					labelStyle={'display': 'inline-block'},
@@ -289,7 +290,7 @@ def wlm_ac_stats_graph(graph_name):
     )
 	return graph
 
-csv_columns = ['timestamp','gaming_server','AP','bcn_rssi', 'pwr_on_period', 'scan_period', 'congestion_level', 'phy_err','mpdu_err', 'retries', 'mpdu_lost', 'rx_ampdu', 'rx_mpdu', 'tx_mpdu', 'tx_ampdu', 'contention_time_avg']
+csv_columns = ['timestamp','gaming_server','AP','bcn_rssi', 'pwr_on_period', 'scan_period', 'congestion_level', 'phy_err','mpdu_err', 'last_tx_rate', 'retries', 'mpdu_lost', 'rx_ampdu', 'rx_mpdu', 'tx_mpdu', 'tx_ampdu', 'contention_time_avg']
 high_latency_columns = []
 def update_analysis_result(wlm_stats_result_dict):
 	#pass
@@ -487,6 +488,8 @@ def update_wlm_link_stats_graph(link_list, n):
 		graph_list.append(html.Div(wlm_link_stats_graph('wlm_link_stats', ['phy_err'], '', 'phy_err', 'bar'), className = 'row'))
 	if 'mpdu_err' in link_list:
 		graph_list.append(html.Div(wlm_link_stats_graph('wlm_link_stats', ['mpdu_err'], '', 'mpdu_err', 'bar'), className = 'row'))
+	if 'last_tx_rate' in link_list:
+		graph_list.append(html.Div(wlm_link_stats_graph('wlm_link_stats', ['last_tx_rate'], 'Mbps', 'last_tx_rate', 'scatter'), className = 'row'))
 	return graph_list
 
 @app.callback(
