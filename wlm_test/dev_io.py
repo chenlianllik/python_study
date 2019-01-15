@@ -3,7 +3,6 @@ import string
 import time
 import datetime
 import random
-import serial 
 from offset_parser import wlm_offset_parser
 
 class wlan_device(object):
@@ -209,36 +208,6 @@ def get_wlan_device_list():
 			dev_id.append(cmd[:cmd.find('\tdevice')])
 	
 	return dev_id
-class turn_table_device(object):
-	def __init__(self, com_port):
-		try:
-			self.__device_port = serial.Serial(com_port, 9600, timeout=1)
-		except serial.SerialException:
-			print 'can not find com port:' + com_port
-			self.__device_port = None
-		self.__angle_set_cnt = 0
-	
-	def close(self):
-		if self.__device_port != None:
-			self.__device_port.close()
-	
-	def angle_set(self, cmd, val):
-		if cmd == 'step':
-			self.__angle_set_cnt += val
-			if self.__device_port != None:
-				self.__device_port.write(str(val*800)+'s'+'\n')		
-				time.sleep(4*val)
-		elif cmd == 'reset':
-			self.__angle_set_cnt = 0
-			if self.__device_port != None:
-				self.__device_port.write(str(self.__angle_set_cnt*(-800))+'s'+'\n')
-				time.sleep(35)
-		elif cmd == 'init':
-			self.__angle_set_cnt = 0
-			if self.__device_port != None:
-				self.__device_port.write('0g'+'\n')
-				time.sleep(10)
-		print "angle set cmd:%s val:%d angle_set_cnt:%d" % (cmd, val, self.__angle_set_cnt)
 
 if __name__ == '__main__':
 	wlan_dev = wlan_device('7e2cc7ce')
