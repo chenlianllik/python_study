@@ -52,7 +52,7 @@ def render_content(tab):
 if __name__ == "__main__":
 	print "start app"
 	wlm_monitor.wlan_dev = wlan_device('sim')
-	wlm_monitor.admin_ip = "10.234.220.142"
+	wlm_monitor.admin_ip = "192.168.1.7"
 	wlm_monitor.result_csv_file_name = 'ping_test_result_'+wlm_monitor.wlan_dev.device_port+'.csv'
 	
 	app.run_server(debug=False,port=8050,host='0.0.0.0')
