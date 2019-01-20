@@ -39,13 +39,8 @@ current_latency_mode = 'normal'
 wlan_dev = None
 admin_ip = None
 result_csv_file_name = None
-#app = dash.Dash(__name__)
 
-#color_list = ['rgb(22, 96, 167)', 'rgb(205, 12, 24)']
-#app.css.append_css({'external_url': 'https://cdn.rawgit.com/plotly/dash-app-stylesheets/2d266c578d2a6e8850ebce48fdb52759b2aef506/stylesheet-oil-and-gas.css'})  # noqa: E501
-#wlan_dev = wlan_device('sim')
-#wlan_dev = wlan_device('7e2cc7ce')
-#wlan_dev.prepare_wlm_stats()
+last_btn3_time = 0
 print "restart wlm monitor"
 layout = html.Div(children=[
 	#html.H1("WLAN ping latency dashboard", style={'textAlign': 'center','color': '#f2f2f2', 'backgroundColor':'#003366'}, className='row'),
@@ -307,18 +302,19 @@ def update_analysis_result(wlm_stats_result_dict):
 	wlm_stats_cache_list.append(wlm_stats_result_dict)
 
 	#save to csv file
-	first_write = False
-	if not os.path.exists(result_csv_file_name):
-		first_write = True
-	#print len(wlm_stats_cache_list)
-	if len(wlm_stats_cache_list) >= 20:
-		with open(result_csv_file_name, 'ab') as csvfile:
-			writer = csv.DictWriter(csvfile, fieldnames=csv_columns)
-			if first_write:
-				writer.writeheader()
-			for data in wlm_stats_cache_list:
-				writer.writerow(data)
-		wlm_stats_cache_list = []
+	if result_csv_file_name != None:
+		first_write = False
+		if not os.path.exists(result_csv_file_name):
+			first_write = True
+		#print len(wlm_stats_cache_list)
+		if len(wlm_stats_cache_list) >= 20:
+			with open(result_csv_file_name, 'ab') as csvfile:
+				writer = csv.DictWriter(csvfile, fieldnames=csv_columns)
+				if first_write:
+					writer.writeheader()
+				for data in wlm_stats_cache_list:
+					writer.writerow(data)
+			wlm_stats_cache_list = []
 
 	#ping latency cdf result
 	wlm_stats_ping_cdf_dict['gaming_server'].append(wlm_stats_result_dict['gaming_server'])
@@ -414,6 +410,7 @@ def update_ping_addr_output(n, btn1, btn2, input1, input2):
 def displayClick(btn1, btn2, btn3, n):
 	global current_test_state
 	global start_date_time
+	global last_btn3_time
 	print "displayClick"
 	if is_addmin_access():
 		if int(btn1) > int(btn2) and int(btn1) > int(btn3):
@@ -423,9 +420,11 @@ def displayClick(btn1, btn2, btn3, n):
 		elif int(btn2) > int(btn1) and int(btn2) > int(btn3):
 			current_test_state = 'stop'
 		elif int(btn3) > int(btn1) and int(btn3) > int(btn2):
-			restart_test()
-			start_date_time = datetime.datetime.now()
-			current_test_state = 'start'
+			if btn3 > last_btn3_time:
+				restart_test()
+				start_date_time = datetime.datetime.now()
+				current_test_state = 'start'
+				last_btn3_time = btn3
 		print current_test_state
 	
 	return '''
