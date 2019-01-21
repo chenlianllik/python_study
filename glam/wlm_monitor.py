@@ -28,7 +28,7 @@ tolal_high_latency_cnt = 0
 current_test_state = 'stop'
 id_ac_map = ['VO','VI','BE','BK']
 ping_addr_dict = {'gaming_server':['', 5], 'AP':['192.168.1.1', 10]}
-
+link_info_str = ''
 wlm_latency_mode_dict = {
 	'ultra-low':'ITO:200, Scan:Suppress, Roam:Suppress',
 	'low':'ITO:100, Scan:20ms, Roam:Allow',
@@ -298,6 +298,7 @@ def update_analysis_result(wlm_stats_result_dict):
 	global wlm_stats_cache_list
 	global total_ping_cnt
 	global tolal_high_latency_cnt
+	global ping_addr_dict
 	total_ping_cnt += 1
 	wlm_stats_cache_list.append(wlm_stats_result_dict)
 
@@ -311,6 +312,9 @@ def update_analysis_result(wlm_stats_result_dict):
 			with open(result_csv_file_name, 'ab') as csvfile:
 				writer = csv.DictWriter(csvfile, fieldnames=csv_columns)
 				if first_write:
+					first_row = '''start_time:{}, connection:{}, AP_IP:{}, gaming_server:{},  latency_mode:{}\n''' \
+					.format(start_date_time, link_info_str, ping_addr_dict['gaming_server'][0], ping_addr_dict['AP'][0], current_latency_mode)
+					csvfile.write(first_row)
 					writer.writeheader()
 				for data in wlm_stats_cache_list:
 					writer.writerow(data)
@@ -376,7 +380,8 @@ def update_ping_addr_output(n, btn1, btn2, input1, input2):
 	print input2
 	print ping_addr_dict['gaming_server'][0]
 	print ping_addr_dict['AP'][0]
-	
+	global link_info_str
+
 	if btn1 != None or btn2 != None:	
 		if is_addmin_access():
 			ping_addr_dict['gaming_server'][0] = input1
