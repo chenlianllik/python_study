@@ -313,7 +313,7 @@ def update_analysis_result(wlm_stats_result_dict):
 				writer = csv.DictWriter(csvfile, fieldnames=csv_columns)
 				if first_write:
 					first_row = '''start_time:{}, connection:{}, AP_IP:{}, gaming_server:{},  latency_mode:{}\n''' \
-					.format(start_date_time, link_info_str, ping_addr_dict['gaming_server'][0], ping_addr_dict['AP'][0], current_latency_mode)
+					.format(start_date_time, link_info_str, ping_addr_dict['AP'][0], ping_addr_dict['gaming_server'][0], current_latency_mode)
 					csvfile.write(first_row)
 					writer.writeheader()
 				for data in wlm_stats_cache_list:
