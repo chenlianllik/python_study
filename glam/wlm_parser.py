@@ -239,6 +239,7 @@ def wlm_parser_plot_ac_graph(graph_name):
 	max_yaxis = -1000000000
 	graph_title = graph_name
 	#print graph_name
+	print "wlm_parser_plot_ac_graph:{} current_page:{}".format(graph_name, current_page)
 	ac_str_list = df.loc[page_start_index : page_start_index+xaxis_max, graph_name].tolist()
 	ac_zip_list = list(zip(*[map(int, item[1:-1].split(', ')) for item in ac_str_list]))
 	for i in xrange(len(wlm_monitor.id_ac_map)):
@@ -274,7 +275,7 @@ def wlm_parser_plot_ac_graph(graph_name):
 	)
 	graph = dcc.Graph(
 		id=graph_title,
-		animate=True,
+		animate=False,
 		figure={'data': grap_data_list,'layout':grap_layout}
     )
 	return graph
@@ -293,7 +294,7 @@ def wlm_parser_plot_generic_graph(plot_name, graph_name_list, xaxis_title, mode)
 	min_yaxis = 100
 	max_yaxis = -100
 	graph_title = plot_name
-	print "wlm_plot_graph current_page:{}".format(current_page)
+	print "wlm_parser_plot_generic_graph:{} current_page:{}".format(plot_name, current_page)
 	for graph_name in graph_name_list:
 		y_data = df.loc[page_start_index : page_start_index+xaxis_max, graph_name].tolist()
 		min_yaxis = min(min_yaxis, min(y_data))
@@ -334,7 +335,7 @@ def wlm_parser_plot_generic_graph(plot_name, graph_name_list, xaxis_title, mode)
 	)
 	graph = dcc.Graph(
 		id=graph_title,
-		animate=True,
+		animate=False,
 		figure={'data': grap_data_list,'layout':grap_layout}
     )
 	return graph
@@ -397,27 +398,30 @@ def display_cur_page_output(btn1, btn2, filter):
 	Input('plot_checkbox', 'values')]
 	)
 def update_wlm_plot_graph(top_output, plot_list):
+	global column_name_list
 	graph_list = []
 	graph_list.append(html.Hr())
 	graph_list.append(html.Div(wlm_parser_plot_generic_graph('ping_latency', ['AP', 'gaming_server'], 'ms',  'scatter'), style = div_border_style, className = 'twelve columns'))
-	if 'bcn_rssi' in plot_list and 'bcn_rssi' in column_name_list:
+	check_box_plot_name_list = [str(r) for r in plot_list]
+	plot_to_show = list(set(column_name_list) & set(check_box_plot_name_list))
+	if 'bcn_rssi' in plot_to_show:
 		graph_list.append(html.Div(wlm_parser_plot_generic_graph('bcn_rssi', ['bcn_rssi'], 'dbm',  'scatter'), style = div_border_style, className = 'twelve columns'))
-	if 'congestion_level' in plot_list and 'congestion_level' in column_name_list:
+	if 'congestion_level' in plot_to_show:
 		graph_list.append(html.Div(wlm_parser_plot_generic_graph('congestion_level', ['congestion_level'], '%',  'bar'), style = div_border_style, className = 'twelve columns'))
-	if 'pwr_on_period' in plot_list and 'pwr_on_period' in column_name_list:
+	if 'pwr_on_period' in plot_to_show:
 		graph_list.append(html.Div(wlm_parser_plot_generic_graph('pwr_on_period', ['pwr_on_period'], '%',  'bar'), style = div_border_style, className = 'twelve columns'))
-	if 'scan_period' in plot_list and 'scan_period' in column_name_list:
+	if 'scan_period' in plot_to_show:
 		graph_list.append(html.Div(wlm_parser_plot_generic_graph('scan_period', ['scan_period'], '%',  'bar'), style = div_border_style, className = 'twelve columns'))
-	if 'phy_err' in plot_list and 'phy_err' in column_name_list:
+	if 'phy_err' in plot_to_show:
 		graph_list.append(html.Div(wlm_parser_plot_generic_graph('phy_err', ['phy_err'], ' ',  'bar'), style = div_border_style, className = 'twelve columns'))
-	if 'last_tx_rate' in plot_list and 'last_tx_rate' in column_name_list:
+	if 'last_tx_rate' in plot_to_show:
 		graph_list.append(html.Div(wlm_parser_plot_generic_graph('last_tx_rate', ['last_tx_rate'], 'Mbps',  'scatter'), style = div_border_style, className = 'twelve columns'))
-	if 'retries' in plot_list and 'retries' in column_name_list:
+	if 'retries' in plot_to_show:
 		graph_list.append(html.Div(wlm_parser_plot_ac_graph('retries'), style = div_border_style, className = 'twelve columns'))
-	if 'rx_mpdu' in plot_list and 'rx_mpdu' in column_name_list:
+	if 'rx_mpdu' in plot_to_show:
 		graph_list.append(html.Div(wlm_parser_plot_ac_graph('rx_mpdu'), style = div_border_style, className = 'twelve columns'))
-	if 'tx_mpdu' in plot_list and 'tx_mpdu' in column_name_list:
+	if 'tx_mpdu' in plot_to_show:
 		graph_list.append(html.Div(wlm_parser_plot_ac_graph('tx_mpdu'), style = div_border_style, className = 'twelve columns'))
-	if 'contention_time_avg' in plot_list and 'contention_time_avg' in column_name_list:
+	if 'contention_time_avg' in plot_to_show:
 		graph_list.append(html.Div(wlm_parser_plot_ac_graph('contention_time_avg'), style = div_border_style, className = 'twelve columns'))
 	return graph_list
