@@ -386,7 +386,8 @@ def display_cur_page_output(btn1, btn2, filter):
 			current_filtered_page_index = 0
 		last_btn_timestamp = int(btn2)
 	#print filtered_page_list
-	current_page = filtered_page_list[current_filtered_page_index]
+	if len(filtered_page_list) != 0:
+		current_page = filtered_page_list[current_filtered_page_index]
 	print "display_cur_page_output current_page:{}".format(current_page)
 	return '''
 		current page:"{}"
@@ -402,6 +403,11 @@ def update_wlm_plot_graph(top_output, plot_list):
 	graph_list = []
 	graph_list.append(html.Hr())
 	graph_list.append(html.Div(wlm_parser_plot_generic_graph('ping_latency', ['AP', 'gaming_server'], 'ms',  'scatter'), style = div_border_style, className = 'twelve columns'))
+	# easter egg
+	if len(filtered_page_list) == 0:
+		return html.Div([
+            html.Img(src='http://orig00.deviantart.net/4caa/f/2013/012/1/c/teemo_business_card_by_dasqui-d5r9mbn.png', height='279', width='500')
+        ], className="ten columns padded"),
 	check_box_plot_name_list = [str(r) for r in plot_list]
 	plot_to_show = list(set(column_name_list) & set(check_box_plot_name_list))
 	if 'bcn_rssi' in plot_to_show:
