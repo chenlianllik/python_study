@@ -153,11 +153,11 @@ def parse_contents(contents, filename, date):
 	if 'csv' in filename:
 		# Assume that the user uploaded a CSV file
 		# don't know how to solve \n issue with pandas to read first line in csv
+		io.StringIO(decoded.decode('utf-8'))
 		with open(filename) as f:
 			connection_info = f.readline()
 		print connection_info
-		df = pd.read_csv(
-			io.StringIO(decoded.decode('utf-8')), header=1)
+		df = pd.read_csv((filename), header=1)
 	else:
 		return html.Div([
 			'Please select a csv file'
@@ -231,7 +231,7 @@ def wlm_parser_plot_ac_graph(graph_name):
 	global samples_last_page
 	global total_pages
 	xaxis_max = max_samples_per_page
-	if current_page == total_pages:
+	if current_page == total_pages and samples_last_page != 0:
 		xaxis_max = min(xaxis_max, samples_last_page)
 	page_start_index = (current_page - 1)*max_samples_per_page
 	grap_data_list = []
@@ -287,7 +287,7 @@ def wlm_parser_plot_generic_graph(plot_name, graph_name_list, xaxis_title, mode)
 	global samples_last_page
 	global total_pages
 	xaxis_max = max_samples_per_page
-	if current_page == total_pages:
+	if current_page == total_pages and samples_last_page != 0:
 		xaxis_max = min(xaxis_max, samples_last_page)
 	page_start_index = (current_page - 1)*max_samples_per_page
 	grap_data_list = []
