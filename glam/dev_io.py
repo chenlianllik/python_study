@@ -4,6 +4,57 @@ import time
 import datetime
 import random
 from offset_parser import wlm_offset_parser
+from threading import Timer
+
+class ping_timer(object):
+	def __init__(self, name, addr, ping_func, interval):
+		self.name = name
+		self.addr = addr
+		self.func = ping_func
+		self.interval = interval
+		self.result_list = []
+		self.timer = Timer(self.interval, self.__ping_func)
+		self.running = False
+	def __ping_func(self):
+		if self.running == True:
+			print("ping_timer ts:{} name:{} addr:{}".format(datetime.datetime.now(), self.name, self.addr))
+			now = time.time()
+			latency_result = self.func(self.addr, 10)
+			cost = (time.time() - now)
+			print("ping_timer ts:{} cost:{} result:{} nex:{}".format(datetime.datetime.now(), cost, latency_result, (self.interval - cost)))
+			self.result_list.append(latency_result)
+			self.timer = Timer(self.interval - cost, self.__ping_func)
+			self.timer.start()
+		
+	def start(self):
+		if self.running == False and self.addr.strip() != '':
+			self.running = True
+			self.timer = Timer(self.interval, self.__ping_func)
+			self.timer.start()
+	
+	def stop(self):
+		if self.running == True:
+			self.running = False
+			self.result_list = []
+			self.timer.cancel()
+		
+	def get_result(self):
+		print self.addr
+		print self.running
+		print(self.result_list)
+		count = 5
+		while len(self.result_list) == 0 and count > 0:
+			count -= 1
+			time.sleep(0.2)
+		print("ping_timer get_result name:{} len:{}".format(self.name, len(self.result_list)))
+		if len(self.result_list) == 0:
+			return -1
+		mean = sum(self.result_list)/len(self.result_list)
+		self.result_list = []
+		return mean
+	def update_addr(self, addr):
+		self.result_list = []
+		self.addr = addr
 
 class wlan_device(object):
 	def __init__(self, device_port):
@@ -11,6 +62,7 @@ class wlan_device(object):
 			self.device_port = device_port
 			self.__pwr_state = 'off'
 			self.__wlm_stats_req_time = time.time()
+			self.__ping_timer_dict = dict()
 			return None
 		out = os.popen('adb devices')
 		cmd_out = out.read()
@@ -28,6 +80,7 @@ class wlan_device(object):
 		self.__wlm_offset_map = None
 		self.__wlm_stats_req_time = time.time()
 		self.__wlam_last_ac_stats_dict = dict()
+		self.__ping_timer_dict = dict()
 
 	def get_rssi(self):
 		if self.device_port == 'sim':
@@ -75,7 +128,7 @@ class wlan_device(object):
 					link_info_dict[tmp_list[0]] = tmp_list[1]
 		return link_info_dict
 	
-	def get_ping_latency(self, ip_addr, count):
+	def __get_ping_latency(self, ip_addr, count):
 		if self.device_port == 'sim':
 			if ip_addr == '':
 				return float(-1)
@@ -104,6 +157,26 @@ class wlan_device(object):
 			print float(cmd_out.split('/')[1])
 			
 			return float(cmd_out.split('/')[1])
+	
+	def create_ping_timer(self, addr_list):
+		for addr in addr_list:
+			if addr['name'] not in self.__ping_timer_dict.keys():
+				self.__ping_timer_dict[addr['name']] = ping_timer(addr['name'], addr['addr'], self.__get_ping_latency, 2)
+	
+	def start_ping(self, name):
+		if name in self.__ping_timer_dict.keys():
+			self.__ping_timer_dict[name].start()
+	def stop_ping(self, name):
+		if name in self.__ping_timer_dict.keys():
+			self.__ping_timer_dict[name].stop()
+	def update_ping_addr(self, name, addr):
+		if name in self.__ping_timer_dict.keys():
+			self.__ping_timer_dict[name].update_addr(addr)
+	def get_ping_latency(self, name):
+		if name in self.__ping_timer_dict.keys():
+			return self.__ping_timer_dict[name].get_result()
+		else:
+			return -1
 	
 	def get_wlm_link_stats(self, stats_value_list):
 		wlm_link_stats_dict = {}
