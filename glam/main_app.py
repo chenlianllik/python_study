@@ -56,7 +56,6 @@ if __name__ == "__main__":
 		wlm_monitor.wlan_dev = wlan_device('sim')
 	wlm_monitor.wlan_dev.prepare_wlm_stats()
 	wlm_monitor.wlan_dev.set_wlm_latency_mode('normal')
-	wlm_monitor.wlan_dev.create_ping_timer([{'name':item_name, 'addr':wlm_monitor.ping_addr_dict[item_name][0]} for item_name in wlm_monitor.ping_addr_dict.keys()])
 	wlm_monitor.admin_ip = sys.argv[3]
 	wlm_monitor.result_csv_file_name = 'ping_test_result_'+wlm_monitor.wlan_dev.device_port+'.csv'
 	if wlm_monitor.check_admin_ip_alive(wlm_monitor.admin_ip):

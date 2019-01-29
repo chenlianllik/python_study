@@ -386,8 +386,6 @@ def update_ping_addr_output(n, btn1, btn2, input1, input2):
 		if is_addmin_access():
 			ping_addr_dict['gaming_server'][0] = input1
 			ping_addr_dict['AP'][0] = input2
-			for name in ping_addr_dict.keys():
-				wlan_dev.update_ping_addr(name, ping_addr_dict[name][0])
 	if wlan_dev.device_port == 'sim':	
 		return '''
 			[gaming_server address: {} 
@@ -423,20 +421,14 @@ def displayClick(btn1, btn2, btn3, n):
 		if int(btn1) > int(btn2) and int(btn1) > int(btn3):
 			if current_test_state != 'start':
 				current_test_state = 'start'
-				for name in ping_addr_dict.keys():
-					wlan_dev.start_ping(name)
 				start_date_time = datetime.datetime.now()
 		elif int(btn2) > int(btn1) and int(btn2) > int(btn3):
 			current_test_state = 'stop'
-			for name in ping_addr_dict.keys():
-				wlan_dev.stop_ping(name)
 		elif int(btn3) > int(btn1) and int(btn3) > int(btn2):
 			if btn3 > last_btn3_time:
 				restart_test()
 				start_date_time = datetime.datetime.now()
 				current_test_state = 'start'
-				for name in ping_addr_dict.keys():
-					wlan_dev.start_ping(name)
 				last_btn3_time = btn3
 		print current_test_state
 	
@@ -469,7 +461,7 @@ def update_wlm_ping_stats_graph(n):
 		if os.path.exists(result_csv_file_name):
 			os.remove(result_csv_file_name)
 	if current_test_state == 'start' and is_addmin_access():
-		ping_latency = dict((ip_addr, wlan_dev.get_ping_latency(ip_addr)) for ip_addr in ping_addr_dict.keys())
+		ping_latency = dict((ip_addr, wlan_dev.get_ping_latency(ping_addr_dict[ip_addr][0], ping_addr_dict[ip_addr][1])) for ip_addr in ping_addr_dict.keys())
 		link_stats, ac_stats = wlan_dev.get_wlm_stats()
 		wlm_stats_plot_list.append({'ping_latency':ping_latency, 'wlm_link_stats':link_stats, 'wlm_ac_stats':ac_stats})
 		update_analysis_result(dict(ping_latency.items()+link_stats.items()+ac_stats.items()))
